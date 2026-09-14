@@ -1,18 +1,23 @@
-# 🤖 AI QA Agent Platform
+# 🤖 Autonomous AI QA Agent Platform
 
-> **Autonomous Knowledge-Driven Test Automation powered by Google Drive Knowledge Ingestion & Playwright**
-
----
-
-## 🌟 Overview (প্রজেক্ট ওভারভিউ)
-
-**AI QA Agent Platform** হলো একটি পার্সোনাল অটোনোমাস **AI QA ইঞ্জিনিয়ারিং সিস্টেম**। এখানে ব্যবহারকারীকে কোনো ম্যানুয়াল টেস্ট কেস লিখতে হয় না। 
-
-গুগল ড্রাইভে সংরক্ষিত QA নলেজ (যেমন: **Boundary Value Analysis**, **Equivalence Partitioning**, **Project Requirements Specifications**, এবং **Historical Defect Logs**) স্বয়ংক্রিয়ভাবে RAG/MCP ইনডেক্সিংয়ের মাধ্যমে রিট্রিভ করে এজেন্ট নিজেই রিয়েল-ওয়ার্ল্ড টেস্ট মেট্রিক্স তৈরি করে এবং **Playwright** ব্রাউজার দিয়ে রিয়েল-টাইম টেস্ট এক্সিকিউট করে।
+> **Autonomous, Knowledge-Driven Test Automation powered by Google Drive / PDF Knowledge Ingestion & Playwright**
 
 ---
 
-## 🏗️ System Architecture (সিস্টেম আর্কিটেকচার)
+## 🌟 Overview
+
+The **Autonomous AI QA Agent Platform** is a personal AI-driven QA engineering system designed to eliminate manual test case writing. 
+
+Instead of writing repetitive test cases, users store their testing documents in a Google Drive repository (or local folder)—including **Boundary Value Analysis (BVA)** guidelines, **Equivalence Partitioning (EP)** techniques, **Project Requirement Specifications**, and **Historical Defect Databases**.
+
+When you instruct the agent with a single prompt like:
+> **“Test the checkout feature quantity validation”**
+
+The Agent dynamically retrieves testing heuristics and project rules via RAG/MCP search, synthesizes executable test scenarios, and autonomously drives a **Playwright Chromium** browser session with real-time screenshot captures and pass/fail reports.
+
+---
+
+## 🏗️ System Architecture
 
 ```text
                  ┌──────────────────────────────────────┐
@@ -56,40 +61,40 @@
 
 ---
 
-## 🚀 Key Features (মূল বৈশিষ্ট্যসমূহ)
+## 🚀 Key Features
 
 ### 1. 📂 Google Drive & PDF Knowledge Base Indexer
-- **QA Fundamentals**: Functional Testing, Smoke & Regression Testing গাইডলাইন।
+- **QA Fundamentals**: Functional Testing, Smoke & Sanity, and Regression Testing guidelines.
 - **Test Techniques**:
-  - **Boundary Value Analysis (BVA)**: কোনো ইনপুট রেঞ্জ `[1, 10]` হলে স্বয়ংক্রিয়ভাবে `0, 1, 2, 9, 10, 11` বাউন্ডারি ভ্যালু ডিটেকশন।
-  - **Equivalence Partitioning (EP)**: ভ্যালিড ও ইনভ্যালিড পার্টিশন টেস্ট।
-- **Project Documents**: Checkout Requirements v2.4 (দাম, কুপন রুল, কার্ড ভ্যালিডেশন)।
-- **Bug Knowledge**: অতীতের ডিফেক্ট হিস্টোরি (যেমন `#BUG-104` শূন্য কোয়ান্টিটি চেকআউট বাগ)।
+  - **Boundary Value Analysis (BVA)**: Automatically computes boundary inputs `[0, 1, 2, MAX-1, MAX, MAX+1]` for any numeric range constraints (e.g., Quantity 1–10 → 0, 1, 2, 9, 10, 11).
+  - **Equivalence Partitioning (EP)**: Separates inputs into valid and invalid partitions (e.g. promo codes, email formats).
+- **Project Documents**: E-Commerce Checkout Requirements v2.4 (item pricing, promo discounts, credit card validation rules).
+- **Bug Knowledge**: Historical Defect Database (`#BUG-104` zero-quantity order glitch, `#BUG-219` negative quantity balance bug).
 
 ### 2. 🧠 Autonomous QA Reasoning Brain
-- ব্যবহারকারী শুধু লিখবে: **“Test the checkout feature quantity validation”**
-- এজেন্ট নিজেই ডিসিশন নেবে:
-  - বাউন্ডারি ভ্যালু অ্যানালাইসিস প্রয়োগ করা।
-  - অতীতের ডিফেক্ট `#BUG-104` এর জন্য রিগ্রেশন চেক করা।
-  - কোনো ম্যানুয়াল টেস্ট স্ক্রিপ্ট ছাড়া **৮টি টেস্ট সিনারিও** তৈরি করা।
+- Given a high-level command like *"Test the checkout feature"*, the agent:
+  - Determines which testing techniques apply (BVA for numeric bounds, EP for discount codes).
+  - Cross-references requirements and historical defect vectors.
+  - Automatically synthesizes **8 comprehensive test scenarios** without requiring manually written test scripts.
 
 ### 3. 🎭 Playwright Automation Engine
-- স্বয়ংক্রিয়ভাবে হেডলেস Chromium ব্রাউজার চালু করে রিয়েল DOM ইন্টারেকশন করে।
-- প্রতিটি টেস্ট স্টেপের জন্য **লাইভ স্ক্রিনশট** (`public/screenshots/`) ক্যাপচার করে।
-- DOM রেসপন্স, ভ্যালিডেশন মেসেজ এবং টাইম পারফরম্যান্স লগ সংরক্ষণ করে।
+- Launches a headless/headful Chromium browser instance.
+- Performs real DOM actions (`fill`, `click`, `select`).
+- Evaluates error banners, computed prices, and state changes.
+- Captures step-by-step screenshots in `public/screenshots/` and streams live progress over WebSockets.
 
 ### 4. 🛒 Embedded E-Commerce Sandbox Application
-- সিস্টেমে একটি রিয়েল টার্গেট ই-কমার্স চেকআউট ওয়েব অ্যাপ সংযুক্ত (`http://localhost:3000/sandbox`)।
-- যাতে কোয়ান্টিটি লিমিট (১–১০), কুপন কোড (`SAVE10`), এবং ক্রেডিট কার্ড ভ্যালিডেশন রুলস সরাসরি লাইভ টেস্ট করা যায়।
+- Includes a built-in target checkout application running at `http://localhost:3000/sandbox`.
+- Supports realistic user flows: quantity restrictions (1–10), coupon codes (`SAVE10`, `FREESHIP`), card number & CVC checks, and live order confirmation alerts.
 
 ### 5. 🌓 100% Full Viewport Dual Theme (Dark & White Mode)
-- **🌙 Deep Obsidian Dark Mode (`#0a0d14`)**: গ্লাস-প্যানেল ও নিওন অ্যাকসেন্ট।
-- **☀️ Crisp Clean White Mode (`#f8fafc` / `#ffffff`)**: হাই-কনট্রাস্ট লাইট থিম।
-- হেডার নেভিগেশন বারে ওয়ান-ক্লিক **Sun / Moon** থিম সুইচ বাটন।
+- **🌙 Deep Obsidian Dark Mode (`#0a0d14`)**: Glassmorphism cards with glowing neon accents.
+- **☀️ Crisp Clean White Mode (`#f8fafc` / `#ffffff`)**: High-contrast, pristine light UI.
+- One-click **Sun / Moon** toggle button located in the top navigation bar with persistent `localStorage` support.
 
 ---
 
-## 📁 Project Directory Structure (ফাইল স্ট্রাকচার)
+## 📁 Project Directory Structure
 
 ```text
 QA-Drive/
@@ -105,11 +110,11 @@ QA-Drive/
 │       └── Historical Defects.md
 │
 ├── server/                             # Backend & Playwright Execution Services
-│   ├── knowledge-indexer.js            # RAG / Document indexing engine
-│   ├── qa-agent-brain.js               # AI QA Reasoning & test matrix synthesis
-│   ├── playwright-runner.js            # Automated Playwright test executor
+│   ├── knowledge-indexer.js            # Document parser & RAG search engine
+│   ├── qa-agent-brain.js               # AI QA Reasoning & scenario synthesizer
+│   ├── playwright-runner.js            # Automated Playwright browser runner
 │   ├── sandbox-app.js                  # Target E-Commerce checkout application
-│   └── server.js                       # Express API & WebSocket streaming server
+│   └── server.js                       # Express REST API & WebSocket server
 │
 ├── src/                                # Frontend UI Dashboard (React + Tailwind)
 │   ├── components/
@@ -122,46 +127,52 @@ QA-Drive/
 │   └── index.css                       # Tailwind & theme glassmorphism tokens
 │
 ├── public/screenshots/                 # Live Playwright capture screenshots
-├── package.json                        # Project dependencies
+├── package.json                        # Project dependencies & scripts
 ├── tailwind.config.js                  # Tailwind configuration (darkMode: 'class')
 └── vite.config.js                      # Vite bundler configuration
 ```
 
 ---
 
-## 🛠️ Getting Started (কীভাবে রান করবেন)
+## 🛠️ Installation & Setup
 
-### ১. ডিপেন্ডেন্সি ইনস্টল করুন:
+### 1. Install Dependencies:
 ```bash
 npm install
 npx playwright install chromium
 ```
 
-### ২. সার্ভার ও ড্যাশবোর্ড চালু করুন:
+### 2. Start the Backend & Dashboard:
 
 ```bash
-# ব্যাকএন্ড সার্ভার চালু করতে:
+# Start the Backend Server (Express + WebSockets + Knowledge API + Sandbox):
 node server/server.js
 
-# অথবা কনকারেন্টলি ফ্রন্টএন্ড ও ব্যাকএন্ড রান করতে:
+# In a separate terminal, start the Vite Dev Server:
 npm run dev
 ```
 
 ---
 
-## 🌐 Live URLs & Endpoints
+## 🌐 Live URLs & Ports
 
-| সার্ভিস | URL | বর্ণনা |
+| Service | URL | Description |
 | :--- | :--- | :--- |
-| **AI QA Dashboard UI** | `http://localhost:5173` | মেইন ড্যাশবোর্ড (কমান্ড সেন্টার ও নলেজ ড্রাইভ) |
-| **Target Sandbox App** | `http://localhost:3000/sandbox` | রিয়েল চেকআউট টার্গেট অ্যাপ |
-| **Backend & Knowledge API** | `http://localhost:3000` | নলেজ সার্চ ও প্লে-রাইট টেস্ট সার্ভিস |
+| **AI QA Dashboard UI** | `http://localhost:5173` | Main dashboard (Command Center & Knowledge Explorer) |
+| **Target Sandbox App** | `http://localhost:3000/sandbox` | Live E-Commerce Checkout application under test |
+| **Backend & Knowledge API** | `http://localhost:3000` | REST API, WebSocket streams, and static screenshots |
 
 ---
 
-## 📝 Example Prompts to Try:
+## 💡 Example Prompts to Test
 
-1. `Test the checkout feature quantity validation using Boundary Value Analysis`
-2. `Test promo code validation using Equivalence Partitioning`
-3. `Perform regression test against historical checkout defects`
-4. `Test checkout button behavior on invalid inputs`
+- `Test the checkout feature quantity validation using Boundary Value Analysis`
+- `Test promo code validation using Equivalence Partitioning`
+- `Perform regression test against historical checkout defects`
+- `Test checkout button behavior on invalid inputs`
+
+---
+
+## 📄 License
+
+MIT License © 2026 AI QA Agent Platform.
