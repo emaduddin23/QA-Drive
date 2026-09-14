@@ -4,6 +4,7 @@ import KnowledgeExplorer from './components/KnowledgeExplorer';
 import AgentCommandCenter from './components/AgentCommandCenter';
 import ExecutionMonitor from './components/ExecutionMonitor';
 import SandboxPreview from './components/SandboxPreview';
+import GoogleDriveModal from './components/GoogleDriveModal';
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -11,6 +12,7 @@ export default function App() {
   const [documents, setDocuments] = useState([]);
   const [stats, setStats] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
 
   // Agent & Execution state
   const [isPlanning, setIsPlanning] = useState(false);
@@ -138,6 +140,7 @@ export default function App() {
         docCount={documents.length}
         isSyncing={isSyncing}
         onSync={handleSync}
+        onOpenDriveModal={() => setIsDriveModalOpen(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         theme={theme}
@@ -176,6 +179,13 @@ export default function App() {
           <SandboxPreview />
         )}
       </main>
+
+      {/* Google Drive Integration Modal */}
+      <GoogleDriveModal
+        isOpen={isDriveModalOpen}
+        onClose={() => setIsDriveModalOpen(false)}
+        onSyncComplete={fetchKnowledge}
+      />
 
       {/* Footer */}
       <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 font-mono">

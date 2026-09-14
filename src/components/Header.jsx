@@ -1,7 +1,7 @@
 import React from 'react';
-import { Bot, HardDrive, RefreshCw, ExternalLink, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { Bot, HardDrive, RefreshCw, ExternalLink, ShieldCheck, Sun, Moon, CloudDownload } from 'lucide-react';
 
-export default function Header({ docCount, isSyncing, onSync, activeTab, setActiveTab, theme, toggleTheme }) {
+export default function Header({ docCount, isSyncing, onSync, onOpenDriveModal, activeTab, setActiveTab, theme, toggleTheme }) {
   return (
     <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-[#0f1523]/80 backdrop-blur-md sticky top-0 z-50 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -66,6 +66,15 @@ export default function Header({ docCount, isSyncing, onSync, activeTab, setActi
 
           {/* Actions & Theme Toggle */}
           <div className="flex items-center gap-2.5">
+            {/* Google Drive Cloud Connect Button */}
+            <button
+              onClick={onOpenDriveModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold transition border border-indigo-200 dark:border-indigo-500/30"
+            >
+              <CloudDownload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Connect Drive API</span>
+            </button>
+
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
@@ -85,7 +94,7 @@ export default function Header({ docCount, isSyncing, onSync, activeTab, setActi
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium transition border border-slate-200 dark:border-slate-700 disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Drive'}</span>
+              <span>{isSyncing ? 'Syncing...' : 'Sync Index'}</span>
             </button>
 
             <a

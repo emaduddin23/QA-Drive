@@ -2,17 +2,19 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { knowledgeBase } from './knowledge-indexer.js';
 import { agentBrain } from './qa-agent-brain.js';
 import { getSandboxHtml } from './sandbox-app.js';
 import { runPlaywrightSuite } from './playwright-runner.js';
+import { driveSyncService } from './google-drive-sync.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Serve static screenshots & public assets
 app.use('/screenshots', express.static(path.resolve(process.cwd(), 'public/screenshots')));
@@ -34,6 +36,7 @@ function broadcast(data) {
 
 // 1. Initialize Knowledge Indexer
 knowledgeBase.initialize();
+driveSyncService.initAuth();
 
 // 2. API Routes
 // Target Sandbox Application Endpoint
@@ -50,10 +53,56 @@ app.get('/api/knowledge', (req, res) => {
   res.json({ stats, results });
 });
 
-// Knowledge Sync Endpoint
+// Local / Drive Index Re-sync Endpoint
 app.post('/api/knowledge/sync', async (req, res) => {
   const count = await knowledgeBase.initialize();
-  res.json({ success: true, count, message: 'Google Drive / Local Knowledge Base synchronized successfully.' });
+  res.json({ success: true, count, message: 'QA Knowledge Base synchronized successfully.' });
+});
+
+// Google Drive API Status
+app.get('/api/drive/status', (req, res) => {
+  res.json({
+    hasCredentials: driveSyncService.hasCredentials(),
+    isAuthenticated: driveSyncService.isAuthenticated,
+  });
+});
+
+// Upload & Save Google Drive Service Account Credentials
+app.post('/api/drive/credentials', (req, res) => {
+  const { credentials } = req.body;
+  if (!credentials) {
+    return res.status(400).json({ error: 'Credentials payload is required' });
+  }
+
+  try {
+    const credsPath = path.resolve(process.cwd(), 'credentials.json');
+    fs.writeFileSync(credsPath, JSON.stringify(credentials, null, 2));
+    const authOk = driveSyncService.initAuth(credentials);
+    res.json({ success: authOk, message: 'Google Drive credentials saved and authenticated successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to save credentials: ${err.message}` });
+  }
+});
+
+// Sync from Live Google Drive Folder ID
+app.post('/api/drive/sync', async (req, res) => {
+  const { folderId } = req.body;
+  if (!folderId) {
+    return res.status(400).json({ error: 'Google Drive Folder ID is required' });
+  }
+
+  try {
+    const downloaded = await driveSyncService.syncFolder(folderId);
+    const count = await knowledgeBase.initialize();
+    res.json({
+      success: true,
+      downloadedCount: downloaded.length,
+      indexedCount: count,
+      message: `Successfully retrieved ${downloaded.length} files from Google Drive and indexed ${count} documents.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // AI QA Agent Plan Generator
@@ -77,7 +126,6 @@ app.post('/api/test/execute', async (req, res) => {
 
   const targetUrl = `http://localhost:${PORT}/sandbox`;
   
-  // Run asynchronously and stream via WS, return initial response
   res.json({ success: true, message: 'Playwright automation suite launched.' });
 
   runPlaywrightSuite(testPlan, targetUrl, (update) => {
