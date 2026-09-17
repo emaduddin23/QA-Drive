@@ -47,6 +47,34 @@ export class GoogleDriveSyncService {
     return this.isAuthenticated || fs.existsSync(CREDENTIALS_FILE);
   }
 
+  // Get Service Account Client Email
+  getAccountEmail() {
+    if (fs.existsSync(CREDENTIALS_FILE)) {
+      try {
+        const creds = JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf8'));
+        return creds.client_email || creds.project_id || null;
+      } catch (err) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // Disconnect Drive & clear credentials
+  disconnect() {
+    this.driveClient = null;
+    this.isAuthenticated = false;
+    if (fs.existsSync(CREDENTIALS_FILE)) {
+      try {
+        fs.unlinkSync(CREDENTIALS_FILE);
+        console.log("[GoogleDriveSync] credentials.json deleted and Drive disconnected.");
+      } catch (err) {
+        console.error("Error removing credentials.json:", err);
+      }
+    }
+    return true;
+  }
+
   // Fetch and download files recursively from a Google Drive Folder ID
   async syncFolder(folderId, targetSubDir = '') {
     if (!this.driveClient) {

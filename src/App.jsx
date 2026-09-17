@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import KnowledgeExplorer from './components/KnowledgeExplorer';
 import AgentCommandCenter from './components/AgentCommandCenter';
 import ExecutionMonitor from './components/ExecutionMonitor';
 import SandboxPreview from './components/SandboxPreview';
 import GoogleDriveModal from './components/GoogleDriveModal';
+import PlaywrightMcpModal from './components/PlaywrightMcpModal';
+import AiSettingsModal from './components/AiSettingsModal';
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -13,14 +15,23 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [isPlaywrightModalOpen, setIsPlaywrightModalOpen] = useState(false);
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
-  // Agent & Execution state
+  // Playwright MCP, Google Drive & AI Status
+  const [isMcpConnected, setIsMcpConnected] = useState(false);
+  const [driveStatus, setDriveStatus] = useState({ isConnected: false, clientEmail: null });
+  const [aiStatus, setAiStatus] = useState({ isConnected: false, provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet', maskedKey: '' });
   const [isPlanning, setIsPlanning] = useState(false);
   const [currentPlan, setCurrentPlan] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [currentStep, setCurrentStep] = useState(null);
   const [executionResults, setExecutionResults] = useState([]);
   const [finalReport, setFinalReport] = useState(null);
+
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const isManuallyDisconnectedRef = useRef(false);
 
   // Apply theme class to <html> element
   useEffect(() => {
@@ -39,7 +50,7 @@ export default function App() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  // 1. Load Knowledge Docs on Mount
+  // 1. Load Knowledge Docs, Drive Status & AI Status on Mount
   const fetchKnowledge = async () => {
     try {
       const res = await fetch('/api/knowledge');
@@ -51,15 +62,64 @@ export default function App() {
     }
   };
 
+  const fetchDriveStatus = async () => {
+    try {
+      const res = await fetch('/api/drive/status');
+      const data = await res.json();
+      setDriveStatus({
+        isConnected: Boolean(data.hasCredentials && data.isAuthenticated),
+        clientEmail: data.clientEmail || null
+      });
+    } catch (err) {
+      console.error("Failed to load drive status:", err);
+    }
+  };
+
+  const fetchAiStatus = async () => {
+    try {
+      const res = await fetch('/api/ai/config');
+      const data = await res.json();
+      setAiStatus({
+        isConnected: Boolean(data.hasKey),
+        provider: data.provider || 'openrouter',
+        model: data.model || 'anthropic/claude-3.5-sonnet',
+        maskedKey: data.maskedKey || ''
+      });
+    } catch (err) {
+      console.error("Failed to load AI status:", err);
+    }
+  };
+
   useEffect(() => {
     fetchKnowledge();
+    fetchDriveStatus();
+    fetchAiStatus();
   }, []);
 
-  // 2. Connect WebSocket for Real-time Playwright Updates
-  useEffect(() => {
+  const handleKnowledgeRefresh = () => {
+    fetchKnowledge();
+    fetchDriveStatus();
+    fetchAiStatus();
+  };
+
+  // 2. Connect WebSocket for Real-time Playwright Updates & Live Connection Status
+  const connectWebSocket = () => {
+    if (isManuallyDisconnectedRef.current) return;
+
+    if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+        return;
+      }
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.hostname}:3000`;
     const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setIsMcpConnected(true);
+    };
 
     ws.onmessage = (event) => {
       try {
@@ -77,15 +137,58 @@ export default function App() {
       }
     };
 
-    return () => ws.close();
+    ws.onclose = () => {
+      setIsMcpConnected(false);
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+      }
+      if (!isManuallyDisconnectedRef.current) {
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
+      }
+    };
+
+    ws.onerror = () => {
+      setIsMcpConnected(false);
+    };
+  };
+
+  useEffect(() => {
+    connectWebSocket();
+
+    return () => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      }
+    };
   }, []);
+
+  const handleTogglePlaywrightConnection = (connect) => {
+    if (connect) {
+      isManuallyDisconnectedRef.current = false;
+      connectWebSocket();
+    } else {
+      isManuallyDisconnectedRef.current = true;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      setIsMcpConnected(false);
+    }
+  };
 
   // 3. Sync Google Drive / Local KB
   const handleSync = async () => {
     setIsSyncing(true);
     try {
       await fetch('/api/knowledge/sync', { method: 'POST' });
-      await fetchKnowledge();
+      await handleKnowledgeRefresh();
     } catch (err) {
       console.error("Sync failed:", err);
     } finally {
@@ -141,21 +244,33 @@ export default function App() {
         isSyncing={isSyncing}
         onSync={handleSync}
         onOpenDriveModal={() => setIsDriveModalOpen(true)}
+        onOpenPlaywrightModal={() => setIsPlaywrightModalOpen(true)}
+        onOpenAiModal={() => setIsAiModalOpen(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         theme={theme}
         toggleTheme={toggleTheme}
+        isMcpConnected={isMcpConnected}
+        isExecuting={isExecuting}
+        driveStatus={driveStatus}
+        aiStatus={aiStatus}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8">
         {activeTab === 'agent' && (
-          <div className="space-y-8">
+          <div className="space-y-6 sm:space-y-8">
             <AgentCommandCenter
               onGeneratePlan={handleGeneratePlan}
               isPlanning={isPlanning}
               currentPlan={currentPlan}
               onExecuteSuite={handleExecuteSuite}
               isExecuting={isExecuting}
+              isMcpConnected={isMcpConnected}
+              driveStatus={driveStatus}
+              aiStatus={aiStatus}
+              onOpenDriveModal={() => setIsDriveModalOpen(true)}
+              onOpenPlaywrightModal={() => setIsPlaywrightModalOpen(true)}
+              onOpenAiModal={() => setIsAiModalOpen(true)}
             />
 
             <ExecutionMonitor
@@ -163,6 +278,7 @@ export default function App() {
               currentStep={currentStep}
               executionResults={executionResults}
               finalReport={finalReport}
+              isMcpConnected={isMcpConnected}
             />
           </div>
         )}
@@ -171,7 +287,10 @@ export default function App() {
           <KnowledgeExplorer
             documents={documents}
             stats={stats}
-            onRefresh={fetchKnowledge}
+            onRefresh={handleKnowledgeRefresh}
+            onOpenDriveModal={() => setIsDriveModalOpen(true)}
+            onOpenAiModal={() => setIsAiModalOpen(true)}
+            driveStatus={driveStatus}
           />
         )}
 
@@ -184,11 +303,27 @@ export default function App() {
       <GoogleDriveModal
         isOpen={isDriveModalOpen}
         onClose={() => setIsDriveModalOpen(false)}
-        onSyncComplete={fetchKnowledge}
+        onSyncComplete={handleKnowledgeRefresh}
+      />
+
+      {/* Playwright MCP Controller Modal */}
+      <PlaywrightMcpModal
+        isOpen={isPlaywrightModalOpen}
+        onClose={() => setIsPlaywrightModalOpen(false)}
+        isMcpConnected={isMcpConnected}
+        isExecuting={isExecuting}
+        onToggleConnection={handleTogglePlaywrightConnection}
+      />
+
+      {/* Live AI Settings Modal */}
+      <AiSettingsModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        onConfigSaved={fetchAiStatus}
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 font-mono">
+      <footer className="border-t border-slate-200 dark:border-slate-800 py-4 sm:py-6 px-4 text-center text-[11px] sm:text-xs text-slate-500 font-mono">
         AI QA Agent Platform • Driven by Google Drive Knowledge Base & Playwright Automation
       </footer>
     </div>

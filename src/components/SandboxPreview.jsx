@@ -6,9 +6,9 @@ export default function SandboxPreview() {
 
   return (
     <div className="space-y-4">
-      <div className="glass-panel rounded-xl p-4 flex items-center justify-between">
+      <div className="glass-panel rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+          <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg shrink-0">
             <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
@@ -19,10 +19,10 @@ export default function SandboxPreview() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
             onClick={() => setIframeKey(k => k + 1)}
-            className="p-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition text-xs flex items-center gap-1 border border-slate-200 dark:border-slate-700"
+            className="flex-1 sm:flex-initial justify-center p-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition text-xs flex items-center gap-1.5 border border-slate-200 dark:border-slate-700"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Reset App</span>
@@ -31,7 +31,7 @@ export default function SandboxPreview() {
             href="/sandbox"
             target="_blank"
             rel="noreferrer"
-            className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition text-xs font-semibold flex items-center gap-1"
+            className="flex-1 sm:flex-initial justify-center p-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition text-xs font-semibold flex items-center gap-1.5 shadow-sm"
           >
             <span>Open New Tab</span>
             <ExternalLink className="w-3.5 h-3.5" />
@@ -39,7 +39,7 @@ export default function SandboxPreview() {
         </div>
       </div>
 
-      <div className="glass-panel rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 h-[650px] shadow-2xl">
+      <div className="glass-panel rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 h-[500px] sm:h-[650px] shadow-2xl">
         <iframe
           key={iframeKey}
           src="/sandbox"

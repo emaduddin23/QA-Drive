@@ -3,6 +3,7 @@ export function getSandboxHtml() {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Target App: QA Sandbox Checkout</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -10,8 +11,8 @@ export function getSandboxHtml() {
     body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f8fafc; }
   </style>
 </head>
-<body class="p-6 max-w-xl mx-auto">
-  <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl space-y-6">
+<body class="p-3 sm:p-6 max-w-xl mx-auto">
+  <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-6 shadow-2xl space-y-5 sm:space-y-6">
     <div class="flex justify-between items-center border-b border-slate-800 pb-4">
       <div>
         <span class="bg-indigo-500/20 text-indigo-400 text-xs font-semibold px-2.5 py-1 rounded">Target Application Sandbox</span>

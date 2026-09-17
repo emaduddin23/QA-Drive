@@ -13,6 +13,10 @@ export default defineConfig({
       '/sandbox': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+      },
+      '/screenshots': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
       }
     }
   }

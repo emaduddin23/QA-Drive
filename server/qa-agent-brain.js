@@ -1,9 +1,14 @@
+import fs from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { knowledgeBase } from './knowledge-indexer.js';
+
+const execFileAsync = promisify(execFile);
 
 export class QAAgentBrain {
   constructor() {}
 
-  async planAndExecute(userPrompt, targetUrl) {
+  async planAndExecute(userPrompt, targetUrl, customApiKey = null, provider = 'antigravity', selectedModel = null) {
     const logTrace = [];
 
     const addTrace = (step, title, detail) => {
@@ -14,20 +19,61 @@ export class QAAgentBrain {
 
     addTrace(1, "Requirement Analysis", `Received user instruction: "${userPrompt}"`);
 
-    // Step 1: Query Knowledge Base across categories
-    addTrace(2, "Knowledge MCP Retrieval", "Querying QA Knowledge Base (Drive PDFs & Docs)...");
+    // Step 1: Query Knowledge Base across categories (RAG Context Retrieval)
+    addTrace(2, "Knowledge Base Retrieval", "Searching indexed QA Knowledge Base & Google Drive Docs...");
     
-    const bvaDocs = knowledgeBase.search("Boundary Value Analysis 1 to 10", "Test Techniques");
-    const reqDocs = knowledgeBase.search("Checkout Requirements Quantity", "Project Documents");
-    const bugDocs = knowledgeBase.search("Quantity defect bug", "Bug Knowledge");
-    const epDocs = knowledgeBase.search("Equivalence Partitioning coupon", "Test Techniques");
+    const searchResults = knowledgeBase.search(userPrompt);
+    const topKnowledgeDocs = searchResults.slice(0, 5).map(r => r.doc);
 
-    addTrace(3, "Knowledge Synthesis", `Retrieved ${bvaDocs.length} Technique docs, ${reqDocs.length} Requirement docs, ${bugDocs.length} Defect histories.`);
+    addTrace(3, "Knowledge Synthesis", `Retrieved ${topKnowledgeDocs.length} relevant QA Knowledge documents for context.`);
 
-    // Extract boundary values from BVA technique & Requirements
-    // Requirement specifies Quantity Range [1, 10]
-    // BVA Technique prescribes: MIN-1 (0), MIN (1), MIN+1 (2), MAX-1 (9), MAX (10), MAX+1 (11), Negative (-1)
-    
+    // Determine Key & Model
+    const isAntigravityCli = (provider === 'antigravity');
+    let apiKey = customApiKey;
+    if (!apiKey) {
+      if (provider === 'antigravity') apiKey = process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
+      else if (provider === 'opencode') apiKey = process.env.OPENCODE_API_KEY;
+      else if (provider === 'openrouter') apiKey = process.env.OPENROUTER_API_KEY;
+      else if (provider === 'openai') apiKey = process.env.OPENAI_API_KEY;
+      else apiKey = process.env.GEMINI_API_KEY;
+    }
+
+    if (isAntigravityCli || apiKey) {
+      try {
+        const modelName = selectedModel || (
+          provider === 'antigravity' ? 'antigravity-2.0-pro' :
+          provider === 'opencode' ? 'opencode-zenith-1' :
+          provider === 'openrouter' ? 'anthropic/claude-3.5-sonnet' :
+          provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'
+        );
+
+        addTrace(4, "Google Antigravity AI Engine", `Invoking Google Antigravity CLI / Subscription (${modelName})...`);
+
+        const llmResult = await this.callLlmApi({
+          apiKey,
+          provider,
+          modelName,
+          userPrompt,
+          knowledgeDocs: topKnowledgeDocs
+        });
+
+        if (llmResult && llmResult.testCases && llmResult.testCases.length > 0) {
+          addTrace(5, "Antigravity Agent Test Plan Generated", `Google Antigravity Agent (${modelName}) generated ${llmResult.testCases.length} dynamic QA Test Cases.`);
+          return {
+            logTrace,
+            retrievedKnowledge: topKnowledgeDocs.map(d => ({ title: d.filename, category: d.category, snippet: d.content.substring(0, 150) + '...' })),
+            testCases: llmResult.testCases
+          };
+        }
+      } catch (err) {
+        console.error("[QAAgentBrain] Antigravity / LLM API Call Error:", err.message);
+        addTrace(4, "LLM Error Fallback", `Execution Error: ${err.message}. Falling back to Autonomous QA Brain Engine.`);
+      }
+    } else {
+      addTrace(4, "Autonomous QA Brain Engine", "No external LLM API Key detected. Using pre-packaged Autonomous RAG QA Engine.");
+    }
+
+    // Default Fallback: Pre-packaged Knowledge-Driven QA Brain Test Cases
     const testCases = [
       {
         id: "TC-BVA-01",
@@ -114,17 +160,177 @@ export class QAAgentBrain {
       }
     ];
 
-    addTrace(4, "Test Plan Synthesis", `Generated ${testCases.length} QA Test Cases combining BVA boundary rules & historical bug mitigations.`);
+    addTrace(5, "Test Plan Synthesis", `Generated ${testCases.length} QA Test Cases combining BVA boundary rules & historical bug mitigations.`);
 
     return {
       logTrace,
-      retrievedKnowledge: [
-        { title: "Boundary Value Analysis.md", category: "Test Techniques", snippet: "For range [1, 10] test 0, 1, 2, 9, 10, 11." },
-        { title: "Checkout Requirements.md", category: "Project Documents", snippet: "Quantity min: 1, max: 10 per order." },
-        { title: "Historical Defects.md", category: "Bug Knowledge", snippet: "Defect #BUG-104: Qty 0 allowed checkout bug." }
-      ],
+      retrievedKnowledge: topKnowledgeDocs.map(d => ({
+        title: d.filename,
+        category: d.category,
+        snippet: d.content.substring(0, 150) + '...'
+      })),
       testCases
     };
+  }
+
+  async callLlmApi({ apiKey, provider, modelName, userPrompt, knowledgeDocs }) {
+    const knowledgeText = knowledgeDocs.map(d => `--- File: ${d.filename} (${d.category}) ---\n${d.content}`).join('\n\n');
+
+    const systemPrompt = `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
+Based on the user requirement and the retrieved QA Knowledge Base documents below, generate a JSON object containing test cases for Playwright test runner.
+
+CRITICAL: Return ONLY raw JSON without markdown code blocks.
+
+JSON Output Schema:
+{
+  "testCases": [
+    {
+      "id": "TC-01",
+      "title": "Short title",
+      "technique": "QA Technique used",
+      "kbReference": "Doc name referenced",
+      "inputQty": 1,
+      "coupon": "optional promo code string",
+      "expectedResult": "Expected output description",
+      "actionType": "fill_qty" or "apply_coupon",
+      "shouldPass": true
+    }
+  ]
+}
+
+Knowledge Base Docs:
+${knowledgeText}
+`;
+
+    const cleanJsonResponse = (text) => {
+      let cleaned = text.trim();
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      return JSON.parse(cleaned);
+    };
+
+    if (provider === 'antigravity') {
+      try {
+        const agyBin = fs.existsSync('/Users/bluebayitlimited/.local/bin/agy')
+          ? '/Users/bluebayitlimited/.local/bin/agy'
+          : 'agy';
+
+        const fullPrompt = `${systemPrompt}\n\nAntigravity User Goal: ${userPrompt}`;
+        const { stdout } = await execFileAsync(agyBin, ['-p', fullPrompt], {
+          cwd: process.cwd(),
+          maxBuffer: 10 * 1024 * 1024
+        });
+
+        return cleanJsonResponse(stdout);
+      } catch (agyErr) {
+        console.warn("[QAAgentBrain] Native agy CLI invocation warning:", agyErr.message);
+        if (apiKey) {
+          const targetModel = (modelName && modelName.includes('flash')) ? 'gemini-2.0-flash-exp' : 'gemini-1.5-pro';
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                { role: 'user', parts: [{ text: `${systemPrompt}\n\nAntigravity User Goal: ${userPrompt}` }] }
+              ],
+              generationConfig: { responseMimeType: 'application/json' }
+            })
+          });
+
+          const data = await res.json();
+          if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          return cleanJsonResponse(text);
+        }
+        throw agyErr;
+      }
+    } else if (provider === 'opencode') {
+      const res = await fetch('https://api.opencode.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelName || 'opencode-zenith-1',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.choices?.[0]?.message?.content;
+      return cleanJsonResponse(text);
+    } else if (provider === 'openrouter') {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'http://localhost:5173',
+          'X-Title': 'QA Drive AI Agent'
+        },
+        body: JSON.stringify({
+          model: modelName || 'anthropic/claude-3.5-sonnet',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.choices?.[0]?.message?.content;
+      return cleanJsonResponse(text);
+    } else if (provider === 'openai') {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelName || 'gpt-4o-mini',
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.choices?.[0]?.message?.content;
+      return cleanJsonResponse(text);
+    } else {
+      // Default: Google Gemini REST API
+      const targetModel = modelName && modelName.startsWith('gemini') ? modelName : 'gemini-1.5-flash';
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            { role: 'user', parts: [{ text: `${systemPrompt}\n\nUser Instruction: ${userPrompt}` }] }
+          ],
+          generationConfig: { responseMimeType: 'application/json' }
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      return cleanJsonResponse(text);
+    }
   }
 }
 
