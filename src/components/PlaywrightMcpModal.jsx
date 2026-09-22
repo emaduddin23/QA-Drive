@@ -116,7 +116,7 @@ export default function PlaywrightMcpModal({ isOpen, onClose, isMcpConnected, is
             <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Automated Browser</span>
             <div className="font-semibold text-slate-900 dark:text-slate-200 flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Chromium (Headless Playwright)</span>
+              <span>Chromium (Visible Playwright)</span>
             </div>
           </div>
 

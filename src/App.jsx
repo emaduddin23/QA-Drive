@@ -23,6 +23,7 @@ export default function App() {
   const [driveStatus, setDriveStatus] = useState({ isConnected: false, clientEmail: null });
   const [aiStatus, setAiStatus] = useState({ isConnected: false, provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet', maskedKey: '' });
   const [isPlanning, setIsPlanning] = useState(false);
+  const [isInteractive, setIsInteractive] = useState(false);
   const [currentPlan, setCurrentPlan] = useState(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [currentStep, setCurrentStep] = useState(null);
@@ -216,17 +217,29 @@ export default function App() {
   };
 
   // 4. Generate Test Plan
+  const planAbortControllerRef = useRef(null);
+
+  const handleStopPlanning = () => {
+    if (planAbortControllerRef.current) {
+      planAbortControllerRef.current.abort();
+      setIsPlanning(false);
+    }
+  };
+
   const handleGeneratePlan = async (promptText) => {
     setIsPlanning(true);
     setCurrentPlan(null);
     setExecutionResults([]);
     setFinalReport(null);
+    
+    planAbortControllerRef.current = new AbortController();
 
     try {
       const res = await fetch('/api/test/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptText })
+        body: JSON.stringify({ prompt: promptText }),
+        signal: planAbortControllerRef.current.signal
       });
       const plan = await res.json();
       setCurrentPlan(plan);
@@ -256,6 +269,68 @@ export default function App() {
     }
   };
 
+  // 6. Autonomous Mode Handling
+  const handleStartAutonomous = async (url, username, password, useKnowledgeDrive, goalPrompt) => {
+    setIsExecuting(true);
+    setExecutionResults([]);
+    setFinalReport(null);
+    setCurrentPlan(null); // Clear manual plan
+    
+    try {
+      await fetch('/api/test/autonomous/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, username, password, useKnowledgeDrive, goalPrompt })
+      });
+      // the server will broadcast execution states
+    } catch (err) {
+      console.error("Failed to start autonomous session:", err);
+      setIsExecuting(false);
+    }
+  };
+
+  // 6. Interactive Session Handling
+  const handleStartInteractive = async () => {
+    setIsInteractive(true);
+    setExecutionResults([]);
+    setFinalReport(null);
+    try {
+      await fetch('/api/test/interactive/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUrl: 'http://localhost:5173/sandbox' })
+      });
+    } catch (err) {
+      console.error("Failed to start interactive session:", err);
+      setIsInteractive(false);
+    }
+  };
+
+  const handleSendInteractiveCommand = async (promptText) => {
+    setIsExecuting(true);
+    try {
+      await fetch('/api/test/interactive/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptText })
+      });
+    } catch (err) {
+      console.error("Failed to execute interactive command:", err);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleStopInteractive = async () => {
+    try {
+      await fetch('/api/test/interactive/stop', { method: 'POST' });
+    } catch (err) {
+      console.error("Failed to stop interactive session:", err);
+    } finally {
+      setIsInteractive(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0a0d14] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       <Header
@@ -281,10 +356,14 @@ export default function App() {
           <div className="space-y-6 sm:space-y-8">
             <AgentCommandCenter
               onGeneratePlan={handleGeneratePlan}
+              onStopPlanning={handleStopPlanning}
               isPlanning={isPlanning}
               currentPlan={currentPlan}
               onExecuteSuite={handleExecuteSuite}
               isExecuting={isExecuting}
+              isInteractive={isInteractive}
+              onStartInteractive={handleStartInteractive}
+              onStartAutonomous={handleStartAutonomous}
               isMcpConnected={isMcpConnected}
               driveStatus={driveStatus}
               aiStatus={aiStatus}
@@ -295,6 +374,9 @@ export default function App() {
 
             <ExecutionMonitor
               isExecuting={isExecuting}
+              isInteractive={isInteractive}
+              onSendInteractiveCommand={handleSendInteractiveCommand}
+              onStopInteractive={handleStopInteractive}
               currentStep={currentStep}
               executionResults={executionResults}
               finalReport={finalReport}

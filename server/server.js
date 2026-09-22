@@ -7,7 +7,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { knowledgeBase } from './knowledge-indexer.js';
 import { agentBrain } from './qa-agent-brain.js';
 import { getSandboxHtml } from './sandbox-app.js';
-import { runPlaywrightSuite } from './playwright-runner.js';
+import { runPlaywrightSuite, startInteractiveSession, executeInteractiveActions, stopInteractiveSession } from './playwright-runner.js';
+import { startAutonomousTesting } from './autonomous-agent.js';
 import { driveSyncService } from './google-drive-sync.js';
 
 const app = express();
@@ -278,6 +279,79 @@ app.post('/api/test/execute', async (req, res) => {
   }).then(report => {
     broadcast({ type: 'EXECUTION_COMPLETE', report });
   });
+});
+
+// Autonomous Mode Endpoint
+app.post('/api/test/autonomous/start', async (req, res) => {
+  try {
+    const { url, username, password, useKnowledgeDrive, goalPrompt } = req.body;
+    let currentKey = '';
+    if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
+    else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
+    else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
+    else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
+    else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
+
+    res.json({ success: true, message: 'Autonomous session started' });
+
+    // Retrieve relevant knowledge for autonomous exploration if enabled
+    let retrievedDocs = [];
+    if (useKnowledgeDrive) {
+      const searchResults = knowledgeBase.search('login features navigation test cases workflow', null);
+      retrievedDocs = searchResults.slice(0, 5).map(res => res.doc);
+    }
+
+    startAutonomousTesting(url, username, password, currentKey, activeAiConfig.provider, activeAiConfig.model, retrievedDocs, goalPrompt, (update) => {
+      broadcast(update);
+    }).then(report => {
+      broadcast({ type: 'EXECUTION_COMPLETE', report });
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Interactive Playwright Endpoints
+app.post('/api/test/interactive/start', async (req, res) => {
+  try {
+    const { targetUrl } = req.body;
+    const url = targetUrl || `http://localhost:${PORT}/sandbox`;
+    await startInteractiveSession(url, (update) => broadcast(update));
+    res.json({ success: true, message: 'Interactive session started' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/test/interactive/execute', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    let currentKey = '';
+    if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
+    else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
+    else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
+    else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
+    else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
+
+    broadcast({ type: 'STATUS', message: 'Translating command to actions...' });
+    const actions = await agentBrain.translateInteractiveCommand(prompt, currentKey, activeAiConfig.provider, activeAiConfig.model);
+    
+    const result = await executeInteractiveActions(actions, (update) => broadcast(update));
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/test/interactive/stop', async (req, res) => {
+  try {
+    await stopInteractiveSession();
+    broadcast({ type: 'STATUS', message: 'Interactive session stopped' });
+    res.json({ success: true, message: 'Interactive session stopped' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Start Server

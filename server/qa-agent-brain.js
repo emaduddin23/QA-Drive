@@ -135,10 +135,84 @@ export class QAAgentBrain {
     };
   }
 
-  async callLlmApi({ apiKey, provider, modelName, userPrompt, knowledgeDocs }) {
+  async translateInteractiveCommand(userPrompt, apiKey, provider, modelName) {
+    const systemPrompt = `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
+The user is giving a live instruction to the Playwright browser. You must translate it into an array of Playwright actions.
+
+CRITICAL: Return ONLY raw JSON array without markdown code blocks.
+
+Example output:
+[
+  { "type": "goto", "url": "https://example.com" },
+  { "type": "fill", "selector": "input[name='q']", "value": "test" },
+  { "type": "click", "selector": "button[type='submit']" },
+  { "type": "wait", "timeout": 1000 }
+]
+
+Output ONLY the JSON array.`;
+
+    const llmResult = await this.callLlmApi({
+      apiKey,
+      provider,
+      modelName,
+      userPrompt,
+      knowledgeDocs: [],
+      systemPromptOverride: systemPrompt
+    });
+
+    return Array.isArray(llmResult) ? llmResult : (llmResult.actions || llmResult);
+  }
+
+  async decideNextAutonomousAction({ pageState, pastActions, targetUrl, stepNum, apiKey, provider, modelName, knowledgeDocs = [], goalPrompt }) {
+    const systemPrompt = `You are an Autonomous QA Exploratory Agent.
+Your goal is to test the application by interacting with it, discovering bugs, and generating test cases for what you test.
+The user provided a target URL: ${targetUrl}.
+${goalPrompt ? `\nCRITICAL USER GOAL/INSTRUCTION:\nThe user has provided a specific instruction for you to focus on: "${goalPrompt}". You MUST prioritize testing this flow or feature.\n` : ''}
+
+Current Page State (simplified DOM elements you can interact with):
+${pageState}
+
+Past Actions you have taken:
+${JSON.stringify(pastActions, null, 2)}
+
+Instructions:
+1. Review the Current Page State and Past Actions.
+2. Decide on ONE logical next step to test the application (e.g., click a specific link, fill a form with invalid data, submit a form).
+3. You MUST explore and test AT LEAST 5 different interactions before considering setting "isDone" to true. Do NOT set isDone to true if stepNum < 5. Explore links, try to break forms, submit invalid data, and test boundaries.
+4. If stepNum >= 5 and there is genuinely nothing left to test, you may set "isDone" to true.
+5. Formulate the Playwright actions for this step.
+6. Provide a Test Case description for the action you chose.
+
+CRITICAL: Return ONLY raw JSON without markdown code blocks.
+
+Output Schema:
+{
+  "isDone": boolean,
+  "testCase": {
+    "title": "Short title of what is being tested (e.g., 'Submit Login Form')",
+    "expectedResult": "What you expect to happen",
+    "technique": "Exploratory"
+  },
+  "actions": [
+    { "type": "click", "selector": "#login-btn" }
+  ]
+}`;
+
+    const llmResult = await this.callLlmApi({
+      apiKey,
+      provider,
+      modelName,
+      userPrompt: `Step ${stepNum}: Decide next action.`,
+      knowledgeDocs,
+      systemPromptOverride: systemPrompt
+    });
+
+    return llmResult;
+  }
+  async callLlmApi({ apiKey, provider, modelName, userPrompt, knowledgeDocs, systemPromptOverride }) {
     const knowledgeText = knowledgeDocs.map(d => `--- File: ${d.filename} (${d.category}) ---\n${d.content}`).join('\n\n');
 
-    const systemPrompt = `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
+    const systemPrompt = systemPromptOverride || `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
 Based on the user requirement and the retrieved QA Knowledge Base documents below, generate a JSON object containing test cases for a dynamic Playwright test runner.
 
 CRITICAL: Return ONLY raw JSON without markdown code blocks.

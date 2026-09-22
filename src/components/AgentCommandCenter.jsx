@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { Send, Sparkles, Play, Layers, BookOpen, Cpu, CheckCircle } from 'lucide-react';
+import { Send, Sparkles, Play, Layers, BookOpen, Cpu, CheckCircle, XOctagon } from 'lucide-react';
 
-export default function AgentCommandCenter({ onGeneratePlan, isPlanning, currentPlan, onExecuteSuite, isExecuting, isMcpConnected, driveStatus, aiStatus, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal }) {
+export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isPlanning, currentPlan, onExecuteSuite, isExecuting, isInteractive, onStartInteractive, onStartAutonomous, isMcpConnected, driveStatus, aiStatus, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal }) {
+  const [mode, setMode] = useState('instruction'); // 'instruction' | 'autonomous'
   const [prompt, setPrompt] = useState('Test the checkout feature quantity validation using Boundary Value Analysis');
+  const [autoUrl, setAutoUrl] = useState('http://localhost:5173/sandbox');
+  const [autoUser, setAutoUser] = useState('');
+  const [autoPass, setAutoPass] = useState('');
+  const [autoPrompt, setAutoPrompt] = useState('');
+  const [useKnowledgeDrive, setUseKnowledgeDrive] = useState(true);
 
   const samplePrompts = [
     "Test the checkout feature quantity validation using Boundary Value Analysis",
@@ -31,9 +37,24 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
               AUTONOMOUS AI QA AGENT COMMAND CENTER
             </span>
           </div>
+          <div className="flex bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
+            <button
+              onClick={() => setMode('instruction')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition ${mode === 'instruction' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+              Instruction Mode
+            </button>
+            <button
+              onClick={() => setMode('autonomous')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition ${mode === 'autonomous' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+              Autonomous Crawler
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {mode === 'instruction' ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div className="flex flex-col sm:relative">
             <textarea
               value={prompt}
@@ -42,7 +63,17 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
               rows={3}
               className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3.5 sm:p-4 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-sans shadow-inner resize-none transition-colors sm:pb-12"
             />
-            <div className="mt-2 sm:mt-0 sm:absolute sm:right-3 sm:bottom-3 flex justify-end">
+            <div className="mt-2 sm:mt-0 sm:absolute sm:right-3 sm:bottom-3 flex justify-end gap-2">
+              {isPlanning && (
+                <button
+                  type="button"
+                  onClick={onStopPlanning}
+                  className="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2"
+                >
+                  <span>Stop</span>
+                  <XOctagon className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={isPlanning || !prompt.trim()}
@@ -86,6 +117,69 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
             </div>
           </div>
         </form>
+      ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input
+                type="text"
+                value={autoUrl}
+                onChange={(e) => setAutoUrl(e.target.value)}
+                placeholder="Target URL (e.g. https://example.com)"
+                className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+              <input
+                type="text"
+                value={autoUser}
+                onChange={(e) => setAutoUser(e.target.value)}
+                placeholder="Username (optional)"
+                className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+              <input
+                type="password"
+                value={autoPass}
+                onChange={(e) => setAutoPass(e.target.value)}
+                placeholder="Password (optional)"
+                className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+            <textarea
+              value={autoPrompt}
+              onChange={(e) => setAutoPrompt(e.target.value)}
+              placeholder="Testing Goal / Instructions (Optional). E.g., 'Focus on testing the checkout process...'"
+              rows={2}
+              className="w-full bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+            />
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useKnowledgeDrive}
+                  onChange={(e) => setUseKnowledgeDrive(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                Use Google Drive Knowledge Base
+              </label>
+              <button
+                type="button"
+                onClick={() => onStartAutonomous(autoUrl, autoUser, autoPass, useKnowledgeDrive, autoPrompt)}
+                disabled={isExecuting || !autoUrl.trim()}
+                className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs px-5 py-3 rounded-lg transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isExecuting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Agent Running...</span>
+                  </>
+                ) : (
+                  <>
+                    <Cpu className="w-4 h-4" />
+                    <span>Start Autonomous Crawler</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AI Agent Reasoning & Execution Flow */}
@@ -148,6 +242,14 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
                       <span>Run Playwright Suite</span>
                     </>
                   )}
+                </button>
+                <button
+                  onClick={onStartInteractive}
+                  disabled={isExecuting || isInteractive}
+                  className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                >
+                  <Cpu className="w-4 h-4" />
+                  <span>Interactive Agent</span>
                 </button>
               </div>
             </div>

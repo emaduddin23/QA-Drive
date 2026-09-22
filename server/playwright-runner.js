@@ -4,6 +4,10 @@ import path from 'path';
 
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'public/screenshots');
 
+let activeInteractiveBrowser = null;
+let activeInteractivePage = null;
+let interactiveStepCount = 0;
+
 export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
   if (!fs.existsSync(SCREENSHOT_DIR)) {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -117,4 +121,105 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
     },
     results: executionResults
   };
+}
+
+export async function startInteractiveSession(targetUrl, onStepProgress) {
+  if (activeInteractiveBrowser) {
+    return { success: true, message: 'Interactive session already running.' };
+  }
+  if (!fs.existsSync(SCREENSHOT_DIR)) {
+    fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  }
+
+  onStepProgress({ type: 'STATUS', message: 'Launching Interactive Playwright Browser...' });
+  activeInteractiveBrowser = await chromium.launch({ headless: false });
+  const context = await activeInteractiveBrowser.newContext({ viewport: { width: 1024, height: 768 } });
+  activeInteractivePage = await context.newPage();
+  interactiveStepCount = 0;
+
+  if (targetUrl) {
+    onStepProgress({ type: 'STATUS', message: `Navigating to ${targetUrl}` });
+    await activeInteractivePage.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+  }
+
+  return { success: true };
+}
+
+export async function executeInteractiveActions(actions, onStepProgress) {
+  if (!activeInteractivePage) {
+    throw new Error("No active interactive session. Please start one first.");
+  }
+
+  interactiveStepCount++;
+  const stepNum = interactiveStepCount;
+
+  onStepProgress({
+    type: 'STEP_START',
+    stepIndex: stepNum,
+    totalSteps: '?',
+    testCase: { title: 'Live Interactive Command', id: `INT-${stepNum}` }
+  });
+
+  const startTime = Date.now();
+  let status = 'PASSED';
+  let actualOutput = 'Interactive actions executed successfully';
+  let screenshotUrl = '';
+
+  try {
+    if (actions && Array.isArray(actions)) {
+      for (const action of actions) {
+        onStepProgress({ type: 'STATUS', message: `Executing action: ${action.type} ${action.selector || action.url || ''}` });
+        
+        if (action.type === 'goto') {
+          await activeInteractivePage.goto(action.url, { waitUntil: 'domcontentloaded' });
+        } else if (action.type === 'fill') {
+          await activeInteractivePage.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
+          await activeInteractivePage.fill(action.selector, String(action.value));
+        } else if (action.type === 'click') {
+          await activeInteractivePage.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
+          await activeInteractivePage.click(action.selector);
+        } else if (action.type === 'wait') {
+          await activeInteractivePage.waitForTimeout(action.timeout || 1000);
+        } else if (action.type === 'press') {
+          await activeInteractivePage.keyboard.press(action.key);
+        }
+      }
+    }
+
+    const screenshotFileName = `interactive-${stepNum}-${Date.now()}.png`;
+    const screenshotPath = path.join(SCREENSHOT_DIR, screenshotFileName);
+    await activeInteractivePage.screenshot({ path: screenshotPath, fullPage: false });
+    screenshotUrl = `/screenshots/${screenshotFileName}`;
+  } catch (err) {
+    status = 'FAILED';
+    actualOutput = `Execution error: ${err.message}`;
+  }
+
+  const durationMs = Date.now() - startTime;
+  const resultObj = {
+    stepNum,
+    testCase: { title: 'Live Interactive Command', id: `INT-${stepNum}`, technique: 'Manual' },
+    status,
+    actualOutput,
+    screenshotUrl,
+    durationMs
+  };
+
+  onStepProgress({
+    type: 'STEP_COMPLETE',
+    stepIndex: stepNum,
+    totalSteps: '?',
+    result: resultObj
+  });
+
+  return resultObj;
+}
+
+export async function stopInteractiveSession() {
+  if (activeInteractiveBrowser) {
+    await activeInteractiveBrowser.close();
+    activeInteractiveBrowser = null;
+    activeInteractivePage = null;
+  }
+  return { success: true };
 }
