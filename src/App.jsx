@@ -162,9 +162,7 @@ export default function App() {
         wsRef.current = null;
         ws.onclose = null;
         ws.onerror = null;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close();
-        }
+        ws.close();
       }
     };
   }, []);
@@ -191,6 +189,27 @@ export default function App() {
       await handleKnowledgeRefresh();
     } catch (err) {
       console.error("Sync failed:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // 3b. One-click Drive Retrieve (no modal needed)
+  const handleDriveSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      // Use the stored folder ID (default from modal)
+      const FOLDER_ID = '14eXq0PMPV-_8BsrCeiH3c7nBecOpwf1s';
+      await fetch('/api/drive/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: FOLDER_ID })
+      });
+      await fetch('/api/knowledge/sync', { method: 'POST' });
+      await handleKnowledgeRefresh();
+    } catch (err) {
+      console.error("Drive sync failed:", err);
     } finally {
       setIsSyncing(false);
     }
@@ -229,7 +248,7 @@ export default function App() {
       await fetch('/api/test/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testPlan: currentPlan })
+        body: JSON.stringify({ testPlan: currentPlan, targetUrl: currentPlan.targetUrl })
       });
     } catch (err) {
       console.error("Execution launch error:", err);
@@ -243,6 +262,7 @@ export default function App() {
         docCount={documents.length}
         isSyncing={isSyncing}
         onSync={handleSync}
+        onDriveSync={handleDriveSync}
         onOpenDriveModal={() => setIsDriveModalOpen(true)}
         onOpenPlaywrightModal={() => setIsPlaywrightModalOpen(true)}
         onOpenAiModal={() => setIsAiModalOpen(true)}

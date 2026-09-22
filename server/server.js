@@ -83,6 +83,9 @@ app.post('/api/knowledge/sync', async (req, res) => {
 
 // Google Drive API Status
 app.get('/api/drive/status', (req, res) => {
+  if (!driveSyncService.isAuthenticated && driveSyncService.hasCredentials()) {
+    driveSyncService.initAuth();
+  }
   res.json({
     hasCredentials: driveSyncService.hasCredentials(),
     isAuthenticated: driveSyncService.isAuthenticated,
@@ -122,12 +125,12 @@ app.post('/api/drive/sync', async (req, res) => {
 
   try {
     const downloaded = await driveSyncService.syncFolder(folderId);
-    const count = await knowledgeBase.initialize();
+    const count = await knowledgeBase.initialize(downloaded);
     res.json({
       success: true,
       downloadedCount: downloaded.length,
       indexedCount: count,
-      message: `Successfully retrieved ${downloaded.length} files from Google Drive and indexed ${count} documents.`
+      message: `Successfully retrieved and parsed ${downloaded.length} files from Google Drive into memory.`
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -261,12 +264,12 @@ app.post('/api/test/plan', async (req, res) => {
 
 // Execute Playwright Automation Suite
 app.post('/api/test/execute', async (req, res) => {
-  const { testPlan } = req.body;
+  const { testPlan, targetUrl: reqTargetUrl } = req.body;
   if (!testPlan || !testPlan.testCases) {
     return res.status(400).json({ error: 'Valid test plan is required' });
   }
 
-  const targetUrl = `http://localhost:${PORT}/sandbox`;
+  const targetUrl = reqTargetUrl || `http://localhost:${PORT}/sandbox`;
   
   res.json({ success: true, message: 'Playwright automation suite launched.' });
 

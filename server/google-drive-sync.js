@@ -1,8 +1,8 @@
 import { google } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
+import pdfParse from 'pdf-parse';
 
-const KNOWLEDGE_DIR = path.resolve(process.cwd(), 'QA-Knowledge');
 const CREDENTIALS_FILE = path.resolve(process.cwd(), 'credentials.json');
 
 export class GoogleDriveSyncService {
@@ -75,18 +75,13 @@ export class GoogleDriveSyncService {
     return true;
   }
 
-  // Fetch and download files recursively from a Google Drive Folder ID
+  // Fetch and parse files recursively from a Google Drive Folder ID into memory
   async syncFolder(folderId, targetSubDir = '') {
     if (!this.driveClient) {
       const authSuccess = this.initAuth();
       if (!authSuccess) {
         throw new Error("Google Drive credentials.json not found. Please upload or configure your Service Account credentials.");
       }
-    }
-
-    const currentTargetDir = path.join(KNOWLEDGE_DIR, targetSubDir);
-    if (!fs.existsSync(currentTargetDir)) {
-      fs.mkdirSync(currentTargetDir, { recursive: true });
     }
 
     const downloadedFiles = [];
@@ -106,11 +101,9 @@ export class GoogleDriveSyncService {
         const subFiles = await this.syncFolder(file.id, path.join(targetSubDir, file.name));
         downloadedFiles.push(...subFiles);
       } else {
-        // Download file
-        const sanitizedFileName = file.name.replace(/[/\\?%*:|"<>]/g, '-');
-        const destPath = path.join(currentTargetDir, sanitizedFileName);
+        console.log(`[GoogleDriveSync] Reading & Parsing: ${file.name}`);
         
-        console.log(`[GoogleDriveSync] Downloading: ${file.name} -> ${destPath}`);
+        let content = '';
 
         if (file.mimeType === 'application/vnd.google-apps.document') {
           // Export Google Doc as plain text
@@ -118,28 +111,37 @@ export class GoogleDriveSyncService {
             { fileId: file.id, mimeType: 'text/plain' },
             { responseType: 'text' }
           );
-          fs.writeFileSync(destPath.replace(/\.gdoc$/, '.txt'), exportRes.data);
+          content = exportRes.data;
         } else {
-          // Download PDF, Markdown, or binary media
-          const destStream = fs.createWriteStream(destPath);
+          // Download PDF, Markdown, or binary media as arraybuffer
           const downloadRes = await this.driveClient.files.get(
             { fileId: file.id, alt: 'media' },
-            { responseType: 'stream' }
+            { responseType: 'arraybuffer' }
           );
-
-          await new Promise((resolve, reject) => {
-            downloadRes.data
-              .pipe(destStream)
-              .on('finish', resolve)
-              .on('error', reject);
-          });
+          
+          if (file.mimeType === 'application/pdf' || file.name.endsWith('.pdf')) {
+            try {
+              const pdfData = await pdfParse(Buffer.from(downloadRes.data));
+              content = pdfData.text;
+            } catch (err) {
+              console.error(`[GoogleDriveSync] Failed to parse PDF ${file.name}:`, err);
+              content = ''; 
+            }
+          } else {
+            // Treat as text (e.g. markdown or plain text)
+            content = Buffer.from(downloadRes.data).toString('utf8');
+          }
         }
 
         downloadedFiles.push({
           id: file.id,
           name: file.name,
+          title: file.name.replace(/\.(md|txt|pdf|gdoc)$/, ''),
+          category: targetSubDir || 'General QA',
+          filename: file.name,
+          path: path.join(targetSubDir, file.name),
+          content: content,
           mimeType: file.mimeType,
-          savedPath: destPath
         });
       }
     }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, HardDrive, RefreshCw, ExternalLink, ShieldCheck, Sun, Moon, CloudDownload, Menu, X, CheckCircle, Sparkles, Activity, Cpu } from 'lucide-react';
 
-export default function Header({ docCount, isSyncing, onSync, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal, activeTab, setActiveTab, theme, toggleTheme, isMcpConnected, isExecuting, driveStatus, aiStatus }) {
+export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal, activeTab, setActiveTab, theme, toggleTheme, isMcpConnected, isExecuting, driveStatus, aiStatus }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isDriveConnected = Boolean(driveStatus?.isConnected);
@@ -150,6 +150,29 @@ export default function Header({ docCount, isSyncing, onSync, onOpenDriveModal, 
               )}
             </button>
 
+            {/* One-click Retrieve from Drive — visible only when connected */}
+            {isDriveConnected && (
+              <button
+                type="button"
+                onClick={onDriveSync}
+                disabled={isSyncing}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-600/20 disabled:opacity-50"
+                title="Retrieve & Sync files from Google Drive"
+              >
+                {isSyncing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Retrieving...</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudDownload className="w-3.5 h-3.5" />
+                    <span>Retrieve</span>
+                  </>
+                )}
+              </button>
+            )}
+
             {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
@@ -271,6 +294,21 @@ export default function Header({ docCount, isSyncing, onSync, onOpenDriveModal, 
               <RefreshCw className={`w-4 h-4 text-indigo-500 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{isSyncing ? 'Syncing Index...' : 'Re-sync Knowledge Index'}</span>
             </button>
+
+            {isDriveConnected && (
+              <button
+                onClick={() => { onDriveSync(); setMobileMenuOpen(false); }}
+                disabled={isSyncing}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold border border-indigo-600 shadow-md shadow-indigo-600/20 disabled:opacity-50"
+              >
+                {isSyncing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CloudDownload className="w-4 h-4" />
+                )}
+                <span>{isSyncing ? 'Retrieving from Drive...' : 'Retrieve from Drive'}</span>
+              </button>
+            )}
           </div>
         )}
       </div>

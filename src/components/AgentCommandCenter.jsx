@@ -124,6 +124,11 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Generated automatically by applying BVA boundary rules & historical defect checks to project specs.
                 </p>
+                {currentPlan.targetUrl && (
+                  <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
+                    <span className="font-bold">Target URL:</span> {currentPlan.targetUrl}
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
@@ -155,7 +160,7 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
                     <th className="p-3 font-mono">ID</th>
                     <th className="p-3">Test Scenario</th>
                     <th className="p-3">QA Technique</th>
-                    <th className="p-3">KB Source</th>
+                    <th className="p-3">Actions</th>
                     <th className="p-3">Expected Behavior</th>
                   </tr>
                 </thead>
@@ -169,7 +174,11 @@ export default function AgentCommandCenter({ onGeneratePlan, isPlanning, current
                           {tc.technique}
                         </span>
                       </td>
-                      <td className="p-3 text-slate-600 dark:text-slate-400 text-[11px] truncate max-w-[160px]">{tc.kbReference}</td>
+                      <td className="p-3 text-slate-600 dark:text-slate-400 text-[11px]">
+                        <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded-full font-bold">
+                          {tc.actions ? tc.actions.length : 0} steps
+                        </span>
+                      </td>
                       <td className="p-3 text-slate-800 dark:text-slate-300 min-w-[140px]">{tc.expectedResult}</td>
                     </tr>
                   ))}

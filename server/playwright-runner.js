@@ -15,8 +15,8 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
   try {
     onStepProgress({ type: 'STATUS', message: 'Launching Playwright Chromium Browser...' });
     
-    // Launch Playwright headless browser
-    browser = await chromium.launch({ headless: true });
+    // Launch Playwright headed browser for visual feedback
+    browser = await chromium.launch({ headless: false });
     const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
     const page = await context.newPage();
 
@@ -40,37 +40,28 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
       let screenshotUrl = '';
 
       try {
-        // Reset state or set input
-        if (tc.actionType === 'fill_qty') {
-          await page.fill('#quantity-input', String(tc.inputQty));
-          await page.click('#update-qty-btn');
-          await page.waitForTimeout(300);
-
-          const isErrVisible = await page.isVisible('#validation-error');
-          if (isErrVisible) {
-            actualOutput = await page.innerText('#validation-error');
-          } else {
-            const subtotal = await page.innerText('#cart-subtotal');
-            const total = await page.innerText('#cart-total');
-            actualOutput = `Form Accepted. ${subtotal}, Total: ${total}`;
+        // Execute dynamic actions
+        actualOutput = "Actions executed successfully";
+        if (tc.actions && Array.isArray(tc.actions)) {
+          for (let a = 0; a < tc.actions.length; a++) {
+            const action = tc.actions[a];
+            onStepProgress({ type: 'STATUS', message: `Executing action: ${action.type} ${action.selector || action.url || ''}` });
+            
+            if (action.type === 'goto') {
+              await page.goto(action.url, { waitUntil: 'domcontentloaded' });
+            } else if (action.type === 'fill') {
+              // Wait for element to be visible before filling
+              await page.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
+              await page.fill(action.selector, String(action.value));
+            } else if (action.type === 'click') {
+              await page.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
+              await page.click(action.selector);
+            } else if (action.type === 'wait') {
+              await page.waitForTimeout(action.timeout || 1000);
+            } else if (action.type === 'press') {
+              await page.keyboard.press(action.key);
+            }
           }
-
-          // Evaluate pass/fail matching expected behavior
-          if (tc.shouldPass && isErrVisible) {
-            status = 'FAILED';
-          } else if (!tc.shouldPass && !isErrVisible) {
-            status = 'FAILED';
-          }
-        } else if (tc.actionType === 'apply_coupon') {
-          await page.fill('#quantity-input', String(tc.inputQty || 1));
-          await page.fill('#coupon-input', tc.coupon);
-          await page.click('#apply-coupon-btn');
-          await page.waitForTimeout(300);
-
-          actualOutput = await page.innerText('#coupon-feedback');
-          const isSuccess = actualOutput.includes('✓');
-          if (tc.shouldPass && !isSuccess) status = 'FAILED';
-          if (!tc.shouldPass && isSuccess) status = 'FAILED';
         }
 
         // Capture step screenshot

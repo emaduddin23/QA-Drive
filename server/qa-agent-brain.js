@@ -62,6 +62,7 @@ export class QAAgentBrain {
           return {
             logTrace,
             retrievedKnowledge: topKnowledgeDocs.map(d => ({ title: d.filename, category: d.category, snippet: d.content.substring(0, 150) + '...' })),
+            targetUrl: llmResult.targetUrl || 'http://localhost:3000/sandbox',
             testCases: llmResult.testCases
           };
         }
@@ -80,83 +81,43 @@ export class QAAgentBrain {
         title: "BVA Minimum Invalid Below Boundary (Qty: 0)",
         technique: "Boundary Value Analysis (MIN-1)",
         kbReference: "Test Techniques/Boundary Value Analysis.md",
-        bugReference: "Historical Defect #BUG-104",
-        inputQty: 0,
         expectedResult: "Validation Error: Quantity must be at least 1 item",
-        actionType: "fill_qty",
-        shouldPass: false
+        shouldPass: false,
+        actions: [
+          { type: "goto", url: "http://localhost:3000/sandbox" },
+          { type: "fill", selector: "#quantity-input", value: "0" },
+          { type: "click", selector: "#update-qty-btn" },
+          { type: "wait", timeout: 300 }
+        ]
       },
       {
         id: "TC-BVA-02",
         title: "BVA Minimum Valid Boundary (Qty: 1)",
         technique: "Boundary Value Analysis (MIN)",
         kbReference: "Test Techniques/Boundary Value Analysis.md",
-        inputQty: 1,
         expectedResult: "Subtotal: $49.00, Total: $54.00, No Error",
-        actionType: "fill_qty",
-        shouldPass: true
-      },
-      {
-        id: "TC-BVA-03",
-        title: "BVA Minimum Valid Inside (Qty: 2)",
-        technique: "Boundary Value Analysis (MIN+1)",
-        kbReference: "Test Techniques/Boundary Value Analysis.md",
-        inputQty: 2,
-        expectedResult: "Subtotal: $98.00, Total: $103.00, No Error",
-        actionType: "fill_qty",
-        shouldPass: true
-      },
-      {
-        id: "TC-BVA-04",
-        title: "BVA Maximum Valid Inside (Qty: 9)",
-        technique: "Boundary Value Analysis (MAX-1)",
-        kbReference: "Test Techniques/Boundary Value Analysis.md",
-        inputQty: 9,
-        expectedResult: "Subtotal: $441.00, Shipping: FREE, Total: $441.00",
-        actionType: "fill_qty",
-        shouldPass: true
-      },
-      {
-        id: "TC-BVA-05",
-        title: "BVA Maximum Valid Boundary (Qty: 10)",
-        technique: "Boundary Value Analysis (MAX)",
-        kbReference: "Test Techniques/Boundary Value Analysis.md",
-        inputQty: 10,
-        expectedResult: "Subtotal: $490.00, Shipping: FREE, Total: $490.00",
-        actionType: "fill_qty",
-        shouldPass: true
-      },
-      {
-        id: "TC-BVA-06",
-        title: "BVA Maximum Invalid Above Boundary (Qty: 11)",
-        technique: "Boundary Value Analysis (MAX+1)",
-        kbReference: "Test Techniques/Boundary Value Analysis.md",
-        inputQty: 11,
-        expectedResult: "Validation Error: Quantity cannot exceed 10 items per order",
-        actionType: "fill_qty",
-        shouldPass: false
-      },
-      {
-        id: "TC-EP-07",
-        title: "Equivalence Partitioning: Valid Promo Code (SAVE10)",
-        technique: "Equivalence Partitioning (Valid Partition)",
-        kbReference: "Test Techniques/Equivalence Partitioning.md",
-        inputQty: 1,
-        coupon: "SAVE10",
-        expectedResult: "10% Discount Applied ($4.90 OFF)",
-        actionType: "apply_coupon",
-        shouldPass: true
+        shouldPass: true,
+        actions: [
+          { type: "goto", url: "http://localhost:3000/sandbox" },
+          { type: "fill", selector: "#quantity-input", value: "1" },
+          { type: "click", selector: "#update-qty-btn" },
+          { type: "wait", timeout: 300 }
+        ]
       },
       {
         id: "TC-EP-08",
-        title: "Equivalence Partitioning: Invalid Promo Code (EXPIRED99)",
-        technique: "Equivalence Partitioning (Invalid Partition)",
+        title: "Equivalence Partitioning: Invalid Promo Code",
+        technique: "Equivalence Partitioning",
         kbReference: "Test Techniques/Equivalence Partitioning.md",
-        inputQty: 1,
-        coupon: "EXPIRED99",
-        expectedResult: "Error: Invalid promo code EXPIRED99",
-        actionType: "apply_coupon",
-        shouldPass: false
+        expectedResult: "Error: Invalid promo code",
+        shouldPass: false,
+        actions: [
+          { type: "goto", url: "http://localhost:3000/sandbox" },
+          { type: "fill", selector: "#quantity-input", value: "1" },
+          { type: "fill", selector: "#coupon-input", value: "EXPIRED99" },
+          { type: "click", selector: "#apply-coupon-btn" },
+          { type: "wait", timeout: 300 }
+        ]
       }
     ];
 
@@ -169,6 +130,7 @@ export class QAAgentBrain {
         category: d.category,
         snippet: d.content.substring(0, 150) + '...'
       })),
+      targetUrl: 'http://localhost:3000/sandbox',
       testCases
     };
   }
@@ -177,23 +139,30 @@ export class QAAgentBrain {
     const knowledgeText = knowledgeDocs.map(d => `--- File: ${d.filename} (${d.category}) ---\n${d.content}`).join('\n\n');
 
     const systemPrompt = `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
-Based on the user requirement and the retrieved QA Knowledge Base documents below, generate a JSON object containing test cases for Playwright test runner.
+Based on the user requirement and the retrieved QA Knowledge Base documents below, generate a JSON object containing test cases for a dynamic Playwright test runner.
 
 CRITICAL: Return ONLY raw JSON without markdown code blocks.
 
+1. Extract the 'targetUrl' from the user's prompt (e.g. if user says "goto academy-test.uapp.uk", use "https://academy-test.uapp.uk"). Default to "http://localhost:3000/sandbox" if no URL is mentioned.
+2. For each test case, generate an array of dynamic 'actions' (e.g., 'goto', 'fill', 'click', 'wait', 'press'). Guess standard selectors for login forms or checkout based on the context.
+
 JSON Output Schema:
 {
+  "targetUrl": "https://extracted-url.com",
   "testCases": [
     {
       "id": "TC-01",
       "title": "Short title",
       "technique": "QA Technique used",
       "kbReference": "Doc name referenced",
-      "inputQty": 1,
-      "coupon": "optional promo code string",
       "expectedResult": "Expected output description",
-      "actionType": "fill_qty" or "apply_coupon",
-      "shouldPass": true
+      "shouldPass": true,
+      "actions": [
+        { "type": "goto", "url": "https://extracted-url.com" },
+        { "type": "fill", "selector": "input[type='email'], #email", "value": "test@test.com" },
+        { "type": "click", "selector": "button[type='submit'], .submit-btn" },
+        { "type": "wait", "timeout": 3000 }
+      ]
     }
   ]
 }
@@ -214,9 +183,13 @@ ${knowledgeText}
 
     if (provider === 'antigravity') {
       try {
-        const agyBin = fs.existsSync('/Users/bluebayitlimited/.local/bin/agy')
-          ? '/Users/bluebayitlimited/.local/bin/agy'
-          : 'agy';
+        // Windows path: C:\Users\EMAD\AppData\Local\agy\bin\agy.exe
+        const windowsAgyPath = `C:\\Users\\${process.env.USERNAME || process.env.USER || 'EMAD'}\\AppData\\Local\\agy\\bin\\agy.exe`;
+        const agyBin = fs.existsSync(windowsAgyPath)
+          ? windowsAgyPath
+          : fs.existsSync('/Users/bluebayitlimited/.local/bin/agy')
+            ? '/Users/bluebayitlimited/.local/bin/agy'
+            : 'agy';
 
         const fullPrompt = `${systemPrompt}\n\nAntigravity User Goal: ${userPrompt}`;
         const { stdout } = await execFileAsync(agyBin, ['-p', fullPrompt], {
