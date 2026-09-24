@@ -8,7 +8,7 @@ import { knowledgeBase } from './knowledge-indexer.js';
 import { agentBrain } from './qa-agent-brain.js';
 import { getSandboxHtml } from './sandbox-app.js';
 import { runPlaywrightSuite, startInteractiveSession, executeInteractiveActions, stopInteractiveSession } from './playwright-runner.js';
-import { startAutonomousTesting } from './autonomous-agent.js';
+import { startAutonomousTesting, stopAutonomousTesting } from './autonomous-agent.js';
 import { driveSyncService } from './google-drive-sync.js';
 
 const app = express();
@@ -312,6 +312,16 @@ app.post('/api/test/autonomous/start', async (req, res) => {
   }
 });
 
+app.post('/api/test/autonomous/stop', async (req, res) => {
+  try {
+    stopAutonomousTesting();
+    broadcast({ type: 'STATUS', message: 'Autonomous session stopped by user' });
+    res.json({ success: true, message: 'Autonomous session stopped' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Interactive Playwright Endpoints
 app.post('/api/test/interactive/start', async (req, res) => {
   try {
@@ -353,6 +363,16 @@ app.post('/api/test/interactive/stop', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Serve static bundle
+const distPath = path.resolve(process.cwd(), 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/sandbox') || req.path.startsWith('/screenshots')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Start Server
 server.listen(PORT, () => {

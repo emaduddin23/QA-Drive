@@ -45,6 +45,16 @@ async function getPageState(page) {
   });
 }
 
+let activeBrowser = null;
+let stopRequested = false;
+
+export function stopAutonomousTesting() {
+  stopRequested = true;
+  if (activeBrowser) {
+    activeBrowser.close().catch(() => {});
+  }
+}
+
 export async function startAutonomousTesting(url, username, password, apiKey, provider, modelName, knowledgeDocs, goalPrompt, onStepProgress) {
   if (!fs.existsSync(SCREENSHOT_DIR)) {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
@@ -57,6 +67,7 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
 
   try {
     browser = await chromium.launch({ headless: false });
+    activeBrowser = browser;
     const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
     const page = await context.newPage();
 
@@ -130,7 +141,7 @@ IMPORTANT: Use the EXACT selectors from the page state. Do not guess.`;
 
     // Main Autonomous Loop
     let stepNum = 1;
-    while (true) {
+    while (!stopRequested) {
       onStepProgress({ type: 'STATUS', message: `Analyzing page state (Step ${stepNum})...` });
       
       const pageState = await getPageState(page);
