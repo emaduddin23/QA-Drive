@@ -6,7 +6,6 @@ import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { knowledgeBase } from './knowledge-indexer.js';
 import { agentBrain } from './qa-agent-brain.js';
-import { getSandboxHtml } from './sandbox-app.js';
 import { runPlaywrightSuite, startInteractiveSession, executeInteractiveActions, stopInteractiveSession } from './playwright-runner.js';
 import { startAutonomousTesting, stopAutonomousTesting } from './autonomous-agent.js';
 import { driveSyncService } from './google-drive-sync.js';
@@ -57,15 +56,8 @@ app.get('/api/mcp/status', (req, res) => {
     status: 'online',
     engine: 'Playwright Chromium Automation Runner',
     wsClients: wss.clients.size,
-    timestamp: Date.now(),
-    targetApp: `http://localhost:${PORT}/sandbox`
+    timestamp: Date.now()
   });
-});
-
-// Target Sandbox Application Endpoint
-app.get('/sandbox', (req, res) => {
-  res.setHeader('Content-Type', 'text/html');
-  res.send(getSandboxHtml());
 });
 
 // Knowledge API: Get Indexed Docs & Search
@@ -138,16 +130,40 @@ app.post('/api/drive/sync', async (req, res) => {
   }
 });
 
-// Live AI Config & Provider State
-let activeAiConfig = {
-  provider: process.env.SELECTED_AI_PROVIDER || 'antigravity',
-  model: process.env.SELECTED_AI_MODEL || 'antigravity-2.0-pro',
-  antigravityKey: process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY || '',
-  opencodeKey: process.env.OPENCODE_API_KEY || '',
-  geminiKey: process.env.GEMINI_API_KEY || '',
-  openaiKey: process.env.OPENAI_API_KEY || '',
-  openrouterKey: process.env.OPENROUTER_API_KEY || ''
-};
+// Persistent AI Config & Provider State
+const AI_CONFIG_FILE = path.resolve(process.cwd(), 'ai-config.json');
+
+function loadAiConfig() {
+  let config = {
+    provider: process.env.SELECTED_AI_PROVIDER || 'antigravity',
+    model: process.env.SELECTED_AI_MODEL || 'antigravity-2.0-pro',
+    antigravityKey: process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY || '',
+    opencodeKey: process.env.OPENCODE_API_KEY || '',
+    geminiKey: process.env.GEMINI_API_KEY || '',
+    openaiKey: process.env.OPENAI_API_KEY || '',
+    openrouterKey: process.env.OPENROUTER_API_KEY || ''
+  };
+
+  if (fs.existsSync(AI_CONFIG_FILE)) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, 'utf8'));
+      config = { ...config, ...saved };
+    } catch (e) {
+      console.error("Error loading ai-config.json:", e);
+    }
+  }
+  return config;
+}
+
+function saveAiConfig(config) {
+  try {
+    fs.writeFileSync(AI_CONFIG_FILE, JSON.stringify(config, null, 2));
+  } catch (e) {
+    console.error("Error saving ai-config.json:", e);
+  }
+}
+
+let activeAiConfig = loadAiConfig();
 
 // GET AI Configuration & Status
 app.get('/api/ai/config', (req, res) => {
@@ -169,12 +185,14 @@ app.get('/api/ai/config', (req, res) => {
     provider: activeAiConfig.provider,
     model: activeAiConfig.model,
     hasKey: Boolean(activeKey),
-    maskedKey: activeKey ? `${activeKey.substring(0, 6)}...${activeKey.slice(-4)}` : '',
-    antigravityKey: activeAiConfig.antigravityKey ? '***' : '',
-    opencodeKey: activeAiConfig.opencodeKey ? '***' : '',
-    geminiKey: activeAiConfig.geminiKey ? '***' : '',
-    openaiKey: activeAiConfig.openaiKey ? '***' : '',
-    openrouterKey: activeAiConfig.openrouterKey ? '***' : ''
+    maskedKey: activeKey ? `${activeKey.substring(0, 7)}...${activeKey.slice(-4)}` : '',
+    savedKeys: {
+      antigravity: Boolean(activeAiConfig.antigravityKey),
+      opencode: Boolean(activeAiConfig.opencodeKey),
+      gemini: Boolean(activeAiConfig.geminiKey),
+      openai: Boolean(activeAiConfig.openaiKey),
+      openrouter: Boolean(activeAiConfig.openrouterKey)
+    }
   });
 });
 
@@ -185,46 +203,50 @@ app.post('/api/ai/config', (req, res) => {
   if (provider) activeAiConfig.provider = provider;
   if (model) activeAiConfig.model = model;
 
-  if (antigravityKey !== undefined) {
-    activeAiConfig.antigravityKey = antigravityKey;
-    process.env.ANTIGRAVITY_API_KEY = antigravityKey;
+  if (antigravityKey !== undefined && antigravityKey.trim() !== '') {
+    activeAiConfig.antigravityKey = antigravityKey.trim();
+    process.env.ANTIGRAVITY_API_KEY = antigravityKey.trim();
   }
-  if (opencodeKey !== undefined) {
-    activeAiConfig.opencodeKey = opencodeKey;
-    process.env.OPENCODE_API_KEY = opencodeKey;
+  if (opencodeKey !== undefined && opencodeKey.trim() !== '') {
+    activeAiConfig.opencodeKey = opencodeKey.trim();
+    process.env.OPENCODE_API_KEY = opencodeKey.trim();
   }
-  if (geminiKey !== undefined) {
-    activeAiConfig.geminiKey = geminiKey;
-    process.env.GEMINI_API_KEY = geminiKey;
+  if (geminiKey !== undefined && geminiKey.trim() !== '') {
+    activeAiConfig.geminiKey = geminiKey.trim();
+    process.env.GEMINI_API_KEY = geminiKey.trim();
   }
-  if (openaiKey !== undefined) {
-    activeAiConfig.openaiKey = openaiKey;
-    process.env.OPENAI_API_KEY = openaiKey;
+  if (openaiKey !== undefined && openaiKey.trim() !== '') {
+    activeAiConfig.openaiKey = openaiKey.trim();
+    process.env.OPENAI_API_KEY = openaiKey.trim();
   }
-  if (openrouterKey !== undefined) {
-    activeAiConfig.openrouterKey = openrouterKey;
-    process.env.OPENROUTER_API_KEY = openrouterKey;
+  if (openrouterKey !== undefined && openrouterKey.trim() !== '') {
+    activeAiConfig.openrouterKey = openrouterKey.trim();
+    process.env.OPENROUTER_API_KEY = openrouterKey.trim();
   }
 
   // Backwards compatibility for single apiKey field
-  if (apiKey) {
+  if (apiKey && apiKey.trim() !== '') {
+    const keyTrimmed = apiKey.trim();
     if (activeAiConfig.provider === 'antigravity') {
-      activeAiConfig.antigravityKey = apiKey;
-      process.env.ANTIGRAVITY_API_KEY = apiKey;
+      activeAiConfig.antigravityKey = keyTrimmed;
+      process.env.ANTIGRAVITY_API_KEY = keyTrimmed;
     } else if (activeAiConfig.provider === 'opencode') {
-      activeAiConfig.opencodeKey = apiKey;
-      process.env.OPENCODE_API_KEY = apiKey;
+      activeAiConfig.opencodeKey = keyTrimmed;
+      process.env.OPENCODE_API_KEY = keyTrimmed;
     } else if (activeAiConfig.provider === 'openrouter') {
-      activeAiConfig.openrouterKey = apiKey;
-      process.env.OPENROUTER_API_KEY = apiKey;
+      activeAiConfig.openrouterKey = keyTrimmed;
+      process.env.OPENROUTER_API_KEY = keyTrimmed;
     } else if (activeAiConfig.provider === 'openai') {
-      activeAiConfig.openaiKey = apiKey;
-      process.env.OPENAI_API_KEY = apiKey;
+      activeAiConfig.openaiKey = keyTrimmed;
+      process.env.OPENAI_API_KEY = keyTrimmed;
     } else {
-      activeAiConfig.geminiKey = apiKey;
-      process.env.GEMINI_API_KEY = apiKey;
+      activeAiConfig.geminiKey = keyTrimmed;
+      process.env.GEMINI_API_KEY = keyTrimmed;
     }
   }
+
+  // Save to file for persistence across server restarts
+  saveAiConfig(activeAiConfig);
 
   let activeKey = '';
   if (activeAiConfig.provider === 'antigravity') activeKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
@@ -239,19 +261,20 @@ app.post('/api/ai/config', (req, res) => {
     config: {
       provider: activeAiConfig.provider,
       model: activeAiConfig.model,
-      hasKey: Boolean(activeKey)
+      hasKey: Boolean(activeKey),
+      maskedKey: activeKey ? `${activeKey.substring(0, 7)}...${activeKey.slice(-4)}` : ''
     }
   });
 });
 
 // AI QA Agent Plan Generator
 app.post('/api/test/plan', async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, targetUrl: reqTargetUrl } = req.body;
   if (!prompt) {
     return res.status(400).json({ error: 'Prompt is required' });
   }
 
-  const targetUrl = `http://localhost:${PORT}/sandbox`;
+  const targetUrl = reqTargetUrl || '';
   let currentKey = '';
   if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
   else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
@@ -270,7 +293,7 @@ app.post('/api/test/execute', async (req, res) => {
     return res.status(400).json({ error: 'Valid test plan is required' });
   }
 
-  const targetUrl = reqTargetUrl || `http://localhost:${PORT}/sandbox`;
+  const targetUrl = reqTargetUrl || '';
   
   res.json({ success: true, message: 'Playwright automation suite launched.' });
 
@@ -297,8 +320,11 @@ app.post('/api/test/autonomous/start', async (req, res) => {
     // Retrieve relevant knowledge for autonomous exploration if enabled
     let retrievedDocs = [];
     if (useKnowledgeDrive) {
-      const searchResults = knowledgeBase.search('login features navigation test cases workflow', null);
-      retrievedDocs = searchResults.slice(0, 5).map(res => res.doc);
+      const searchResults = knowledgeBase.search(goalPrompt || 'testing QA test cases techniques SDLC STLC workflow', null);
+      retrievedDocs = searchResults.slice(0, 8).map(res => res.doc);
+      if (retrievedDocs.length === 0 && knowledgeBase.documents.length > 0) {
+        retrievedDocs = knowledgeBase.documents.slice(0, 8);
+      }
     }
 
     startAutonomousTesting(url, username, password, currentKey, activeAiConfig.provider, activeAiConfig.model, retrievedDocs, goalPrompt, (update) => {
@@ -311,7 +337,38 @@ app.post('/api/test/autonomous/start', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
+// Validate API Key Endpoint
+app.post('/api/ai/validate-key', async (req, res) => {
+  const { provider, key } = req.body;
+  if (!provider || !key) {
+    return res.status(400).json({ valid: false, error: 'Provider and key are required.' });
+  }
+  // Basic validation: ensure key is non‑empty and of reasonable length
+  if (key.trim().length < 8) {
+    return res.json({ valid: false, error: 'API key appears too short.' });
+  }
+  // For OpenCode, optionally perform a lightweight test request
+  if (provider === 'opencode') {
+    try {
+      const testRes = await fetch('https://api.openode.ai/v1/models/opencode-coder-7b/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key.trim()}`,
+        },
+        body: JSON.stringify({ prompt: 'Hello', max_tokens: 1 })
+      });
+      if (!testRes.ok) {
+        const err = await testRes.text();
+        return res.json({ valid: false, error: `OpenCode validation failed: ${err}` });
+      }
+    } catch (e) {
+      return res.json({ valid: false, error: `OpenCode validation error: ${e.message}` });
+    }
+  }
+  // Add similar checks for other providers as needed
+  return res.json({ valid: true });
+});
 app.post('/api/test/autonomous/stop', async (req, res) => {
   try {
     stopAutonomousTesting();
@@ -326,7 +383,7 @@ app.post('/api/test/autonomous/stop', async (req, res) => {
 app.post('/api/test/interactive/start', async (req, res) => {
   try {
     const { targetUrl } = req.body;
-    const url = targetUrl || `http://localhost:${PORT}/sandbox`;
+    const url = targetUrl || '';
     await startInteractiveSession(url, (update) => broadcast(update));
     res.json({ success: true, message: 'Interactive session started' });
   } catch (err) {
@@ -369,7 +426,7 @@ const distPath = path.resolve(process.cwd(), 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/sandbox') || req.path.startsWith('/screenshots')) return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/screenshots')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
@@ -377,5 +434,4 @@ if (fs.existsSync(distPath)) {
 // Start Server
 server.listen(PORT, () => {
   console.log(`[AI QA Agent Server] Running at http://localhost:${PORT}`);
-  console.log(`[Target Sandbox App] Running at http://localhost:${PORT}/sandbox`);
 });

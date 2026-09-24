@@ -24,8 +24,17 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
     const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
     const page = await context.newPage();
 
-    onStepProgress({ type: 'STATUS', message: `Navigating to target web app: ${targetUrl}` });
-    await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+    let formattedUrl = (targetUrl || '').trim();
+    if (!formattedUrl) {
+      formattedUrl = 'https://example.com';
+    } else if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    onStepProgress({ type: 'STATUS', message: `Navigating to target web app: ${formattedUrl}` });
+    await page.goto(formattedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(err => {
+      onStepProgress({ type: 'STATUS', message: `Initial navigation warning: ${err.message}` });
+    });
 
     for (let i = 0; i < testPlan.testCases.length; i++) {
       const tc = testPlan.testCases[i];

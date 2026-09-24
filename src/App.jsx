@@ -3,7 +3,6 @@ import Header from './components/Header';
 import KnowledgeExplorer from './components/KnowledgeExplorer';
 import AgentCommandCenter from './components/AgentCommandCenter';
 import ExecutionMonitor from './components/ExecutionMonitor';
-import SandboxPreview from './components/SandboxPreview';
 import GoogleDriveModal from './components/GoogleDriveModal';
 import PlaywrightMcpModal from './components/PlaywrightMcpModal';
 import AiSettingsModal from './components/AiSettingsModal';
@@ -290,7 +289,7 @@ export default function App() {
   };
 
   // 6. Interactive Session Handling
-  const handleStartInteractive = async () => {
+  const handleStartInteractive = async (targetUrl = '') => {
     setIsInteractive(true);
     setExecutionResults([]);
     setFinalReport(null);
@@ -298,7 +297,7 @@ export default function App() {
       await fetch('/api/test/interactive/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetUrl: 'http://localhost:5173/sandbox' })
+        body: JSON.stringify({ targetUrl })
       });
     } catch (err) {
       console.error("Failed to start interactive session:", err);
@@ -394,10 +393,6 @@ export default function App() {
             onOpenAiModal={() => setIsAiModalOpen(true)}
             driveStatus={driveStatus}
           />
-        )}
-
-        {activeTab === 'sandbox' && (
-          <SandboxPreview />
         )}
       </main>
 

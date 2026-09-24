@@ -62,7 +62,7 @@ export class QAAgentBrain {
           return {
             logTrace,
             retrievedKnowledge: topKnowledgeDocs.map(d => ({ title: d.filename, category: d.category, snippet: d.content.substring(0, 150) + '...' })),
-            targetUrl: llmResult.targetUrl || 'http://localhost:3000/sandbox',
+            targetUrl: llmResult.targetUrl || targetUrl || '',
             testCases: llmResult.testCases
           };
         }
@@ -74,7 +74,7 @@ export class QAAgentBrain {
       addTrace(4, "Autonomous QA Brain Engine", "No external LLM API Key detected. Using pre-packaged Autonomous RAG QA Engine.");
     }
 
-    // Default Fallback: Pre-packaged Knowledge-Driven QA Brain Test Cases
+    const defaultTarget = targetUrl || 'https://example.com';
     const testCases = [
       {
         id: "TC-BVA-01",
@@ -84,7 +84,7 @@ export class QAAgentBrain {
         expectedResult: "Validation Error: Quantity must be at least 1 item",
         shouldPass: false,
         actions: [
-          { type: "goto", url: "http://localhost:3000/sandbox" },
+          { type: "goto", url: defaultTarget },
           { type: "fill", selector: "#quantity-input", value: "0" },
           { type: "click", selector: "#update-qty-btn" },
           { type: "wait", timeout: 300 }
@@ -98,7 +98,7 @@ export class QAAgentBrain {
         expectedResult: "Subtotal: $49.00, Total: $54.00, No Error",
         shouldPass: true,
         actions: [
-          { type: "goto", url: "http://localhost:3000/sandbox" },
+          { type: "goto", url: defaultTarget },
           { type: "fill", selector: "#quantity-input", value: "1" },
           { type: "click", selector: "#update-qty-btn" },
           { type: "wait", timeout: 300 }
@@ -112,7 +112,7 @@ export class QAAgentBrain {
         expectedResult: "Error: Invalid promo code",
         shouldPass: false,
         actions: [
-          { type: "goto", url: "http://localhost:3000/sandbox" },
+          { type: "goto", url: defaultTarget },
           { type: "fill", selector: "#quantity-input", value: "1" },
           { type: "fill", selector: "#coupon-input", value: "EXPIRED99" },
           { type: "click", selector: "#apply-coupon-btn" },
@@ -130,7 +130,7 @@ export class QAAgentBrain {
         category: d.category,
         snippet: d.content.substring(0, 150) + '...'
       })),
-      targetUrl: 'http://localhost:3000/sandbox',
+      targetUrl: defaultTarget,
       testCases
     };
   }
@@ -167,6 +167,13 @@ Output ONLY the JSON array.`;
   }
 
   async decideNextAutonomousAction({ pageState, pastActions, targetUrl, stepNum, apiKey, provider, modelName, knowledgeDocs = [], goalPrompt, loggedIn = false }) {
+    const knowledgeSection = (knowledgeDocs && knowledgeDocs.length > 0)
+      ? `\n=== QA KNOWLEDGE BASE (PDF / SPECIFICATION GUIDELINES) ===
+You MUST guide your testing decisions using the following QA methodology and test documentation:
+${knowledgeDocs.map(d => `--- Document: ${d.filename} (${d.category}) ---\n${d.content.substring(0, 2000)}`).join('\n\n')}
+=======================================================\n`
+      : '';
+
     const systemPrompt = `You are an Autonomous QA Exploratory Agent.
 Your goal is to test the application by interacting with it, discovering bugs, and generating test cases for what you test.
 The user provided a target URL: ${targetUrl}.
@@ -181,7 +188,7 @@ You MUST NOT:
 - Do anything related to authentication/login/signin
 Instead, you MUST focus ONLY on testing the INTERNAL pages (dashboard, settings, forms, data, navigation, etc.) that are available AFTER login.
 If the current page appears to be a login page, navigate away from it immediately to the dashboard or main content area.\n` : ''}
-
+${knowledgeSection}
 Current Page State (simplified DOM elements you can interact with):
 ${pageState}
 
@@ -189,13 +196,14 @@ Past Actions you have taken:
 ${JSON.stringify(pastActions, null, 2)}
 
 Instructions:
-1. Review the Current Page State and Past Actions.
-2. Decide on ONE logical next step to test the application (e.g., click a specific link, fill a form with invalid data, submit a form).
-3. You MUST explore and test AT LEAST 5 different interactions before considering setting "isDone" to true. Do NOT set isDone to true if stepNum < 5. Explore links, try to break forms, submit invalid data, and test boundaries.
-4. If stepNum >= 5 and there is genuinely nothing left to test, you may set "isDone" to true.
-5. Formulate the Playwright actions for this step.
-6. Provide a Test Case description for the action you chose.
-${loggedIn ? '7. REMINDER: Do NOT test login. Focus on post-login content ONLY.' : ''}
+1. First, study the QA Knowledge Base documents (PDF guidelines) above. Apply testing techniques like Boundary Value Analysis, Equivalence Partitioning, negative validation tests, or exploratory paths as specified in your documents.
+2. Review the Current Page State and Past Actions.
+3. Decide on ONE logical next step to test the application (e.g., click a specific link, fill a form with invalid data, submit a form).
+4. You MUST explore and test AT LEAST 5 different interactions before considering setting "isDone" to true. Do NOT set isDone to true if stepNum < 5. Explore links, try to break forms, submit invalid data, and test boundaries.
+5. If stepNum >= 5 and there is genuinely nothing left to test, you may set "isDone" to true.
+6. Formulate the Playwright actions for this step.
+7. Provide a Test Case description for the action you chose, referencing the exact PDF document name that guided this test.
+${loggedIn ? '8. REMINDER: Do NOT test login. Focus on post-login content ONLY.' : ''}
 
 CRITICAL: Return ONLY raw JSON without markdown code blocks.
 
@@ -203,13 +211,13 @@ Output Schema:
 {
   "isDone": boolean,
   "testCase": {
-    "title": "Short title of what is being tested (e.g., 'Submit Login Form')",
-    "expectedResult": "What you expect to happen",
-    "technique": "Exploratory"
+    "title": "Short title of what is being tested (e.g., 'Submit Quantity Boundary Test')",
+    "expectedResult": "What you expect to happen based on QA doc rules",
+    "technique": "Boundary Value Analysis / Equivalence Partitioning / Exploratory"
   },
-  "referencedDocs": ["Filename1.txt", "Filename2.pdf"], // Array of document filenames from the knowledge base that guided this decision.
+  "referencedDocs": ["Filename1.pdf", "Filename2.pdf"], // Array of document filenames from the knowledge base that guided this decision.
   "actions": [
-    { "type": "click", "selector": "#login-btn" }
+    { "type": "click", "selector": "#submit-btn" }
   ]
 }`;
 
@@ -224,15 +232,17 @@ Output Schema:
 
     return llmResult;
   }
-  async callLlmApi({ apiKey, provider, modelName, userPrompt, knowledgeDocs, systemPromptOverride }) {
-    const knowledgeText = knowledgeDocs.map(d => `--- File: ${d.filename} (${d.category}) ---\n${d.content}`).join('\n\n');
+  async callLlmApi({ apiKey, provider, modelName, userPrompt, knowledgeDocs = [], systemPromptOverride }) {
+    const knowledgeText = (knowledgeDocs && knowledgeDocs.length > 0)
+      ? knowledgeDocs.map(d => `--- File: ${d.filename} (${d.category}) ---\n${d.content}`).join('\n\n')
+      : '';
 
     const systemPrompt = systemPromptOverride || `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
 Based on the user requirement and the retrieved QA Knowledge Base documents below, generate a JSON object containing test cases for a dynamic Playwright test runner.
 
 CRITICAL: Return ONLY raw JSON without markdown code blocks.
 
-1. Extract the 'targetUrl' from the user's prompt (e.g. if user says "goto academy-test.uapp.uk", use "https://academy-test.uapp.uk"). Default to "http://localhost:3000/sandbox" if no URL is mentioned.
+1. Extract the 'targetUrl' from the user's prompt (e.g. if user says "goto https://your-site.com", use "https://your-site.com"). If no URL is specified in prompt, use the configured targetUrl.
 2. For each test case, generate an array of dynamic 'actions' (e.g., 'goto', 'fill', 'click', 'wait', 'press'). Guess standard selectors for login forms or checkout based on the context.
 
 JSON Output Schema:

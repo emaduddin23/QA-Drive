@@ -4,7 +4,7 @@ import { Send, Sparkles, Play, Layers, BookOpen, Cpu, CheckCircle, XOctagon } fr
 export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isPlanning, currentPlan, onExecuteSuite, isExecuting, isInteractive, onStartInteractive, onStartAutonomous, isMcpConnected, driveStatus, aiStatus, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal }) {
   const [mode, setMode] = useState('instruction'); // 'instruction' | 'autonomous'
   const [prompt, setPrompt] = useState('Test the checkout feature quantity validation using Boundary Value Analysis');
-  const [autoUrl, setAutoUrl] = useState('http://localhost:5173/sandbox');
+  const [autoUrl, setAutoUrl] = useState('');
   const [autoUser, setAutoUser] = useState('');
   const [autoPass, setAutoPass] = useState('');
   const [autoPrompt, setAutoPrompt] = useState('');

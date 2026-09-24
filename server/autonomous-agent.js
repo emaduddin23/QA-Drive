@@ -56,8 +56,17 @@ export function stopAutonomousTesting() {
 }
 
 export async function startAutonomousTesting(url, username, password, apiKey, provider, modelName, knowledgeDocs, goalPrompt, onStepProgress) {
+  stopRequested = false;
+
   if (!fs.existsSync(SCREENSHOT_DIR)) {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+  }
+
+  let targetUrl = (url || '').trim();
+  if (!targetUrl) {
+    targetUrl = 'https://example.com';
+  } else if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    targetUrl = `https://${targetUrl}`;
   }
 
   onStepProgress({ type: 'STATUS', message: 'Starting Autonomous QA Explorer...' });
@@ -71,8 +80,10 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
     const context = await browser.newContext({ viewport: { width: 1024, height: 768 } });
     const page = await context.newPage();
 
-    onStepProgress({ type: 'STATUS', message: `Navigating to ${url}` });
-    await page.goto(url, { waitUntil: 'networkidle' });
+    onStepProgress({ type: 'STATUS', message: `Navigating to ${targetUrl}` });
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(err => {
+      onStepProgress({ type: 'STATUS', message: `Initial navigation warning: ${err.message}` });
+    });
 
     let loggedIn = false;
     const loginPageUrl = page.url(); // Save the login page URL before login

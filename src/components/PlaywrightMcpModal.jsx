@@ -128,10 +128,10 @@ export default function PlaywrightMcpModal({ isOpen, onClose, isMcpConnected, is
           </div>
 
           <div className="bg-slate-50 dark:bg-slate-950/80 p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1">
-            <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Target App Sandbox</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Target Application</span>
             <div className="font-semibold text-slate-900 dark:text-slate-200 flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5 text-emerald-500" />
-              <span>http://localhost:3000/sandbox</span>
+              <span>Configurable (Prompt / URL)</span>
             </div>
           </div>
 
