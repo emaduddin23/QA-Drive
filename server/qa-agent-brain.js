@@ -135,9 +135,12 @@ export class QAAgentBrain {
     };
   }
 
-  async translateInteractiveCommand(userPrompt, apiKey, provider, modelName) {
+  async translateInteractiveCommand(userPrompt, apiKey, provider, modelName, pageState = '') {
     const systemPrompt = `You are Google Antigravity Autonomous Agent, an elite AI QA Engineer.
 The user is giving a live instruction to the Playwright browser. You must translate it into an array of Playwright actions.
+
+Current Page State (DOM elements you can interact with):
+${pageState || 'Not available, you must guess standard selectors.'}
 
 CRITICAL: Return ONLY raw JSON array without markdown code blocks.
 
@@ -163,11 +166,21 @@ Output ONLY the JSON array.`;
     return Array.isArray(llmResult) ? llmResult : (llmResult.actions || llmResult);
   }
 
-  async decideNextAutonomousAction({ pageState, pastActions, targetUrl, stepNum, apiKey, provider, modelName, knowledgeDocs = [], goalPrompt }) {
+  async decideNextAutonomousAction({ pageState, pastActions, targetUrl, stepNum, apiKey, provider, modelName, knowledgeDocs = [], goalPrompt, loggedIn = false }) {
     const systemPrompt = `You are an Autonomous QA Exploratory Agent.
 Your goal is to test the application by interacting with it, discovering bugs, and generating test cases for what you test.
 The user provided a target URL: ${targetUrl}.
 ${goalPrompt ? `\nCRITICAL USER GOAL/INSTRUCTION:\nThe user has provided a specific instruction for you to focus on: "${goalPrompt}". You MUST prioritize testing this flow or feature.\n` : ''}
+${loggedIn ? `\n⚠️ EXTREMELY IMPORTANT - LOGIN IS ALREADY COMPLETE ⚠️
+You have ALREADY logged in successfully. The login step was handled automatically BEFORE your testing loop started.
+You MUST NOT:
+- Navigate to the login page
+- Try to fill login forms
+- Test login functionality
+- Click logout buttons
+- Do anything related to authentication/login/signin
+Instead, you MUST focus ONLY on testing the INTERNAL pages (dashboard, settings, forms, data, navigation, etc.) that are available AFTER login.
+If the current page appears to be a login page, navigate away from it immediately to the dashboard or main content area.\n` : ''}
 
 Current Page State (simplified DOM elements you can interact with):
 ${pageState}
@@ -182,6 +195,7 @@ Instructions:
 4. If stepNum >= 5 and there is genuinely nothing left to test, you may set "isDone" to true.
 5. Formulate the Playwright actions for this step.
 6. Provide a Test Case description for the action you chose.
+${loggedIn ? '7. REMINDER: Do NOT test login. Focus on post-login content ONLY.' : ''}
 
 CRITICAL: Return ONLY raw JSON without markdown code blocks.
 
@@ -193,6 +207,7 @@ Output Schema:
     "expectedResult": "What you expect to happen",
     "technique": "Exploratory"
   },
+  "referencedDocs": ["Filename1.txt", "Filename2.pdf"], // Array of document filenames from the knowledge base that guided this decision.
   "actions": [
     { "type": "click", "selector": "#login-btn" }
   ]

@@ -126,40 +126,20 @@ export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpe
               </span>
             </button>
 
-            {/* Drive API Badge */}
+            {/* Drive Connect / Retrieve — single button */}
             <button
               type="button"
-              onClick={onOpenDriveModal}
+              onClick={isDriveConnected ? onDriveSync : onOpenDriveModal}
+              disabled={isDriveConnected && isSyncing}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer ${
                 isDriveConnected
-                  ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30'
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-600/20 disabled:opacity-50'
                   : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30'
               }`}
-              title={isDriveConnected ? `Google Drive Authenticated` : 'Click to connect Google Drive'}
+              title={isDriveConnected ? 'Retrieve & Sync files from Google Drive' : 'Click to connect Google Drive'}
             >
               {isDriveConnected ? (
-                <>
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                  <span>Drive ✓</span>
-                </>
-              ) : (
-                <>
-                  <CloudDownload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span>Connect Drive</span>
-                </>
-              )}
-            </button>
-
-            {/* One-click Retrieve from Drive — visible only when connected */}
-            {isDriveConnected && (
-              <button
-                type="button"
-                onClick={onDriveSync}
-                disabled={isSyncing}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-600/20 disabled:opacity-50"
-                title="Retrieve & Sync files from Google Drive"
-              >
-                {isSyncing ? (
+                isSyncing ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     <span>Retrieving...</span>
@@ -169,9 +149,14 @@ export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpe
                     <CloudDownload className="w-3.5 h-3.5" />
                     <span>Retrieve</span>
                   </>
-                )}
-              </button>
-            )}
+                )
+              ) : (
+                <>
+                  <CloudDownload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Connect Drive</span>
+                </>
+              )}
+            </button>
 
             {/* Theme Toggle Button */}
             <button

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 
 const CREDENTIALS_FILE = path.resolve(process.cwd(), 'credentials.json');
 
@@ -123,8 +123,9 @@ export class GoogleDriveSyncService {
           
           if (file.mimeType === 'application/pdf' || file.name.endsWith('.pdf')) {
             try {
-              const pdfData = await pdfParse(Buffer.from(downloadRes.data));
-              content = pdfData.text;
+              const pdf = new PDFParse({ data: Buffer.from(downloadRes.data) });
+              const result = await pdf.getText();
+              content = result.text || '';
             } catch (err) {
               console.error(`[GoogleDriveSync] Failed to parse PDF ${file.name}:`, err);
               content = ''; 

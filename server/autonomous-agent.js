@@ -6,21 +6,42 @@ import { agentBrain } from './qa-agent-brain.js';
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'public/screenshots');
 
 async function getPageState(page) {
-  // A simple function to extract interactive elements from the DOM
+  // Extract interactive elements with detailed selector info
   return await page.evaluate(() => {
     const elements = Array.from(document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"]'));
     return elements.map((el, i) => {
       const tag = el.tagName.toLowerCase();
-      const text = el.innerText || el.value || el.placeholder || el.name || el.id || '';
-      const id = el.id ? `#${el.id}` : '';
-      const className = el.className && typeof el.className === 'string' ? `.${el.className.split(' ').join('.')}` : '';
-      let selector = id || className;
-      if (!selector) {
-        if (el.name) selector = `[name="${el.name}"]`;
-        else selector = tag; // Fallback
-      }
-      return `[${i}] <${tag} selector="${selector}"> ${text.substring(0, 50).replace(/\n/g, ' ')} </${tag}>`;
-    }).slice(0, 100).join('\n'); // Limit to 100 elements to avoid massive tokens
+      const text = (el.innerText || el.textContent || '').trim().substring(0, 60).replace(/\n/g, ' ');
+      const type = el.type || '';
+      const id = el.id || '';
+      const name = el.name || '';
+      const placeholder = el.placeholder || '';
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      const href = el.href || '';
+      const value = (tag === 'input' || tag === 'textarea') ? (el.value || '').substring(0, 30) : '';
+
+      // Build the best possible selector
+      let selector = '';
+      if (id) selector = `#${id}`;
+      else if (name) selector = `[name="${name}"]`;
+      else if (type && tag === 'input') selector = `input[type="${type}"]`;
+      else selector = tag;
+
+      // Build a descriptive line
+      let desc = `[${i}] <${tag}`;
+      if (type) desc += ` type="${type}"`;
+      if (id) desc += ` id="${id}"`;
+      if (name) desc += ` name="${name}"`;
+      if (placeholder) desc += ` placeholder="${placeholder}"`;
+      if (ariaLabel) desc += ` aria-label="${ariaLabel}"`;
+      desc += ` selector="${selector}"`;
+      if (text) desc += `> ${text}`;
+      else if (value) desc += `> value="${value}"`;
+      else desc += `>`;
+      if (href) desc += ` href="${href}"`;
+      desc += ` </${tag}>`;
+      return desc;
+    }).slice(0, 100).join('\n');
   });
 }
 
@@ -40,42 +61,93 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
     const page = await context.newPage();
 
     onStepProgress({ type: 'STATUS', message: `Navigating to ${url}` });
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.goto(url, { waitUntil: 'networkidle' });
+
+    let loggedIn = false;
+    const loginPageUrl = page.url(); // Save the login page URL before login
 
     // Initial Login Step (if credentials provided)
     if (username && password) {
       onStepProgress({ type: 'STATUS', message: `Attempting auto-login with provided credentials...` });
-      pastActions.push({ action: 'login', username });
-      const loginPrompt = `Find the login fields and submit them with username: ${username} and password: ${password}`;
+      const loginPrompt = `Look at the page state below and find the email/username input field and password input field. Fill them and click the login/submit button.
+Username/Email: ${username}
+Password: ${password}
+
+IMPORTANT: Use the EXACT selectors from the page state. Do not guess.`;
       
-      const loginActions = await agentBrain.translateInteractiveCommand(loginPrompt, apiKey, provider, modelName);
+      const loginPageState = await getPageState(page);
+      onStepProgress({ type: 'STATUS', message: `Login page state: ${loginPageState.substring(0, 300)}...` });
+      
+      const loginActions = await agentBrain.translateInteractiveCommand(loginPrompt, apiKey, provider, modelName, loginPageState);
       if (Array.isArray(loginActions)) {
+        onStepProgress({ type: 'STATUS', message: `Login actions: ${JSON.stringify(loginActions)}` });
         for (const action of loginActions) {
-          if (action.type === 'fill') await page.fill(action.selector, action.value).catch(() => {});
-          else if (action.type === 'click') await page.click(action.selector).catch(() => {});
+          try {
+            if (action.type === 'fill') {
+              await page.fill(action.selector, action.value, { timeout: 5000 });
+              onStepProgress({ type: 'STATUS', message: `✓ Filled ${action.selector}` });
+            }
+            else if (action.type === 'click') {
+              await page.click(action.selector, { timeout: 5000 });
+              onStepProgress({ type: 'STATUS', message: `✓ Clicked ${action.selector}` });
+            }
+            else if (action.type === 'wait') await page.waitForTimeout(action.timeout || 1000);
+            else if (action.type === 'press') await page.keyboard.press(action.key || 'Enter');
+          } catch (e) {
+            onStepProgress({ type: 'STATUS', message: `✗ Login action failed: ${action.type} ${action.selector} — ${e.message}` });
+          }
         }
-        await page.waitForTimeout(2000); // wait for redirect
+
+        // Wait for navigation/redirect after login
+        onStepProgress({ type: 'STATUS', message: `Waiting for login redirect...` });
+        try {
+          await page.waitForURL((url) => url.toString() !== loginPageUrl, { timeout: 10000 });
+          loggedIn = true;
+          onStepProgress({ type: 'STATUS', message: `✓ Login successful! Redirected to: ${page.url()}` });
+        } catch (e) {
+          // URL didn't change — try pressing Enter as fallback
+          onStepProgress({ type: 'STATUS', message: `URL did not change. Trying Enter key as fallback...` });
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(5000);
+          if (page.url() !== loginPageUrl) {
+            loggedIn = true;
+            onStepProgress({ type: 'STATUS', message: `✓ Login successful after Enter! Now at: ${page.url()}` });
+          } else {
+            onStepProgress({ type: 'STATUS', message: `✗ Login may have failed. Still at: ${page.url()}. Proceeding anyway...` });
+            loggedIn = true; // Mark as logged in anyway to prevent re-testing login
+          }
+        }
+      } else {
+        onStepProgress({ type: 'STATUS', message: `Failed to parse login actions. Proceeding without login.` });
       }
+
+      pastActions.push('LOGIN COMPLETED - Authentication done. Do NOT revisit login page or test login forms.');
     }
 
+    // Record the post-login URL as the "base" for testing
+    const postLoginUrl = page.url();
+    onStepProgress({ type: 'STATUS', message: `Starting testing from: ${postLoginUrl}` });
+
     // Main Autonomous Loop
-    const MAX_STEPS = 10;
-    for (let stepNum = 1; stepNum <= MAX_STEPS; stepNum++) {
-      onStepProgress({ type: 'STATUS', message: `Analyzing page state (Step ${stepNum}/${MAX_STEPS})...` });
+    let stepNum = 1;
+    while (true) {
+      onStepProgress({ type: 'STATUS', message: `Analyzing page state (Step ${stepNum})...` });
       
       const pageState = await getPageState(page);
+      const currentUrl = page.url();
       
-      onStepProgress({ type: 'STATUS', message: `Deciding next action...` });
+      onStepProgress({ type: 'STATUS', message: `Deciding next action... (Current URL: ${currentUrl})` });
       const decision = await agentBrain.decideNextAutonomousAction({
         pageState,
         pastActions,
-        targetUrl: url,
+        targetUrl: postLoginUrl, // Use post-login URL, not the original login page URL
         stepNum,
         apiKey,
         provider,
         modelName,
         knowledgeDocs,
-        goalPrompt
+        goalPrompt,
+        loggedIn
       });
 
       if (decision.isDone) {
@@ -83,10 +155,14 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
         break;
       }
 
+      if (decision.referencedDocs && decision.referencedDocs.length > 0) {
+        onStepProgress({ type: 'STATUS', message: `Using knowledge docs: ${decision.referencedDocs.join(', ')}` });
+      }
+
       onStepProgress({
         type: 'STEP_START',
         stepIndex: stepNum,
-        totalSteps: MAX_STEPS,
+        totalSteps: '∞',
         testCase: { title: decision.testCase?.title || `Autonomous Step ${stepNum}`, id: `AUTO-${stepNum}` }
       });
 
@@ -98,11 +174,38 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
       try {
         if (decision.actions && Array.isArray(decision.actions)) {
           for (const action of decision.actions) {
+            // BLOCK any action that tries to navigate to login page
+            if (loggedIn && action.type === 'goto') {
+              const targetLower = (action.url || '').toLowerCase();
+              if (targetLower.includes('login') || targetLower.includes('signin') || targetLower.includes('sign-in') || targetLower === loginPageUrl.toLowerCase()) {
+                onStepProgress({ type: 'STATUS', message: `⛔ Blocked navigation to login page: ${action.url}` });
+                actualOutput = 'Blocked: Attempted to navigate back to login page';
+                continue;
+              }
+            }
+
+            // BLOCK clicking logout buttons
+            if (loggedIn && action.type === 'click') {
+              const selectorLower = (action.selector || '').toLowerCase();
+              if (selectorLower.includes('logout') || selectorLower.includes('log-out') || selectorLower.includes('sign-out') || selectorLower.includes('signout')) {
+                onStepProgress({ type: 'STATUS', message: `⛔ Blocked logout click: ${action.selector}` });
+                actualOutput = 'Blocked: Attempted to click logout';
+                continue;
+              }
+            }
+
             if (action.type === 'goto') await page.goto(action.url, { waitUntil: 'domcontentloaded' });
             else if (action.type === 'fill') await page.fill(action.selector, String(action.value)).catch(()=> { actualOutput = `Failed to find selector ${action.selector}`});
             else if (action.type === 'click') await page.click(action.selector).catch(()=> { actualOutput = `Failed to find selector ${action.selector}`});
             else if (action.type === 'wait') await page.waitForTimeout(action.timeout || 1000);
+            else if (action.type === 'press') await page.keyboard.press(action.key || 'Enter');
           }
+        }
+
+        // Check if we accidentally landed on login page after actions
+        if (loggedIn && page.url().toLowerCase().includes('login')) {
+          onStepProgress({ type: 'STATUS', message: `⚠️ Detected redirect to login page. Navigating back to: ${postLoginUrl}` });
+          await page.goto(postLoginUrl, { waitUntil: 'networkidle' });
         }
         
         // Let UI settle before screenshot
@@ -125,7 +228,7 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
         testCase: {
           id: `AUTO-${stepNum}`,
           title: decision.testCase?.title || `Autonomous Step ${stepNum}`,
-          technique: decision.testCase?.technique || 'Exploratory',
+          technique: (decision.testCase?.technique || 'Exploratory') + (decision.referencedDocs && decision.referencedDocs.length > 0 ? ` [Docs: ${decision.referencedDocs.join(', ')}]` : ''),
           expectedResult: decision.testCase?.expectedResult || 'Expected application to respond correctly'
         },
         status,
@@ -135,10 +238,11 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
       };
 
       executionResults.push(resultObj);
-      onStepProgress({ type: 'STEP_COMPLETE', stepIndex: stepNum, totalSteps: MAX_STEPS, result: resultObj });
+      onStepProgress({ type: 'STEP_COMPLETE', stepIndex: stepNum, totalSteps: '∞', result: resultObj });
+      stepNum++;
     }
 
-    onStepProgress({ type: 'STATUS', message: `Finished autonomous run.` });
+    onStepProgress({ type: 'STATUS', message: `Finished autonomous run after ${stepNum - 1} steps.` });
     
   } catch (err) {
     console.error("Autonomous Engine Error:", err);
