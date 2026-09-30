@@ -8,6 +8,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
 
   const [antigravityKey, setAntigravityKey] = useState('');
   const [opencodeKey, setOpencodeKey] = useState('');
+  const [deepseekKey, setDeepseekKey] = useState('');
   const [openrouterKey, setOpenrouterKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
@@ -28,6 +29,11 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
       { id: 'opencode-zenith-1', name: 'OpenCode Zenith 1 (High Reasoning)' },
       { id: 'opencode-instruct', name: 'OpenCode Instruct (General Agent)' },
       { id: 'custom', name: '✏️ Enter Custom OpenCode Model...' }
+    ],
+    deepseek: [
+      { id: 'deepseek-chat', name: 'DeepSeek V3 / Chat (High Performance)' },
+      { id: 'deepseek-reasoner', name: 'DeepSeek R1 / Reasoner (Deep Logic)' },
+      { id: 'custom', name: '✏️ Enter Custom DeepSeek Model...' }
     ],
     openrouter: [
       { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (Anthropic)' },
@@ -76,6 +82,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
 
   const handleProviderChange = (newProvider) => {
     setProvider(newProvider);
+    setStatusMsg(null);
     const defaultModel = modelOptions[newProvider]?.[0]?.id || '';
     setModel(defaultModel);
   };
@@ -91,6 +98,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
     const keyMap = {
       antigravity: antigravityKey.trim(),
       opencode: opencodeKey.trim(),
+      deepseek: deepseekKey.trim(),
       openrouter: openrouterKey.trim(),
       openai: openaiKey.trim(),
       gemini: geminiKey.trim()
@@ -127,6 +135,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
           model: activeModel,
           antigravityKey: antigravityKey.trim() || undefined,
           opencodeKey: opencodeKey.trim() || undefined,
+          deepseekKey: deepseekKey.trim() || undefined,
           openrouterKey: openrouterKey.trim() || undefined,
           geminiKey: geminiKey.trim() || undefined,
           openaiKey: openaiKey.trim() || undefined
@@ -135,7 +144,16 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
       const data = await res.json();
 
       if (data.success) {
-        setStatusMsg({ type: 'success', text: 'Google Antigravity Agent & Provider configuration saved successfully!' });
+        const providerLabels = {
+          antigravity: 'Google Antigravity Agent',
+          opencode: 'OpenCode Agent',
+          deepseek: 'DeepSeek Engine',
+          openrouter: 'OpenRouter Engine',
+          gemini: 'Google Gemini Engine',
+          openai: 'OpenAI Model'
+        };
+        const label = providerLabels[provider] || 'AI Engine';
+        setStatusMsg({ type: 'success', text: `${label} configuration saved successfully!` });
         fetchConfig();
         if (onConfigSaved) onConfigSaved(data.config);
       } else {
@@ -160,8 +178,8 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
               <Bot className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">AI Engine & Subscription Settings</h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Configure Google Antigravity 2.0, OpenCode, OpenRouter, or Gemini API Keys</p>
+              <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">AI Engine &amp; Subscription Settings</h3>
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Configure Google Antigravity 2.0, OpenCode, DeepSeek, OpenRouter, or Gemini API Keys</p>
             </div>
           </div>
           <button
@@ -214,87 +232,131 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
           {/* Provider Selection Cards */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">1. Select AI Provider</label>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
               <button
                 type="button"
                 onClick={() => handleProviderChange('antigravity')}
-                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'antigravity'
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'antigravity'
                     ? 'bg-gradient-to-tr from-indigo-500/20 to-violet-500/20 border-indigo-500 text-slate-900 dark:text-white ring-2 ring-indigo-500/30 font-bold'
                     : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs">Antigravity</span>
-                  <Bot className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="font-bold text-[11px]">Antigravity</span>
+                  <Bot className="w-3 h-3 text-indigo-500" />
                 </div>
-                <span className="text-[9px] text-slate-500 truncate">2.0 Pro Agent</span>
+                <span className="text-[9px] text-slate-500 truncate">2.0 Pro</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleProviderChange('opencode')}
-                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'opencode'
-                    ? 'bg-cyan-500/10 border-cyan-500 text-slate-900 dark:text-white ring-2 ring-cyan-500/20'
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'opencode'
+                    ? 'bg-cyan-500/10 border-cyan-500 text-slate-900 dark:text-white ring-2 ring-cyan-500/20 font-bold'
                     : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs">OpenCode</span>
-                  <Code className="w-3.5 h-3.5 text-cyan-500" />
+                  <span className="font-bold text-[11px]">OpenCode</span>
+                  <Code className="w-3 h-3 text-cyan-500" />
                 </div>
-                <span className="text-[9px] text-slate-500 truncate">Zenith &amp; 7B</span>
+                <span className="text-[9px] text-slate-500 truncate">Zenith/7B</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleProviderChange('deepseek')}
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'deepseek'
+                    ? 'bg-blue-500/10 border-blue-500 text-slate-900 dark:text-white ring-2 ring-blue-500/20 font-bold'
+                    : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                  }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[11px]">DeepSeek</span>
+                  <Sparkles className="w-3 h-3 text-blue-500" />
+                </div>
+                <span className="text-[9px] text-slate-500 truncate">V3 / R1</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleProviderChange('openrouter')}
-                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'openrouter'
-                    ? 'bg-violet-500/10 border-violet-500 text-slate-900 dark:text-white ring-2 ring-violet-500/20'
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'openrouter'
+                    ? 'bg-violet-500/10 border-violet-500 text-slate-900 dark:text-white ring-2 ring-violet-500/20 font-bold'
                     : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs">OpenRouter</span>
-                  <Globe className="w-3.5 h-3.5 text-violet-500" />
+                  <span className="font-bold text-[11px]">OpenRouter</span>
+                  <Globe className="w-3 h-3 text-violet-500" />
                 </div>
-                <span className="text-[9px] text-slate-500 truncate">Claude, DeepSeek</span>
+                <span className="text-[9px] text-slate-500 truncate">Claude</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleProviderChange('gemini')}
-                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'gemini'
-                    ? 'bg-indigo-500/10 border-indigo-500 text-slate-900 dark:text-white ring-2 ring-indigo-500/20'
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'gemini'
+                    ? 'bg-indigo-500/10 border-indigo-500 text-slate-900 dark:text-white ring-2 ring-indigo-500/20 font-bold'
                     : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs">Gemini</span>
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="font-bold text-[11px]">Gemini</span>
+                  <Sparkles className="w-3 h-3 text-indigo-500" />
                 </div>
-                <span className="text-[9px] text-slate-500 truncate">1.5 / 2.0 Flash</span>
+                <span className="text-[9px] text-slate-500 truncate">1.5 Flash</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleProviderChange('openai')}
-                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'openai'
-                    ? 'bg-emerald-500/10 border-emerald-500 text-slate-900 dark:text-white ring-2 ring-emerald-500/20'
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === 'openai'
+                    ? 'bg-emerald-500/10 border-emerald-500 text-slate-900 dark:text-white ring-2 ring-emerald-500/20 font-bold'
                     : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
                   }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs">OpenAI</span>
-                  <Cpu className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="font-bold text-[11px]">OpenAI</span>
+                  <Cpu className="w-3 h-3 text-emerald-500" />
                 </div>
-                <span className="text-[9px] text-slate-500 truncate">GPT-4o &amp; Mini</span>
+                <span className="text-[9px] text-slate-500 truncate">GPT-4o</span>
               </button>
             </div>
           </div>
 
-          {/* API Keys Inputs */}
+          {/* 2. Model Selection Dropdown */}
+          <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">2. Select AI Model</label>
+            <div className="relative">
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full pl-3 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white font-medium appearance-none"
+              >
+                {(modelOptions[provider] || []).map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+            </div>
+
+            {model === 'custom' && (
+              <input
+                type="text"
+                value={customModelInput}
+                onChange={(e) => setCustomModelInput(e.target.value)}
+                placeholder="Type custom model name (e.g., deepseek-reasoner)..."
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white mt-1.5 font-mono"
+              />
+            )}
+          </div>
+
+          {/* 3. API Keys Inputs */}
           <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">2. API Key &amp; Subscription Token</label>
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">3. API Key &amp; Subscription Token</label>
 
             {/* Antigravity Key */}
             {provider === 'antigravity' && (
@@ -343,6 +405,35 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
                     className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:outline-none dark:text-white font-mono"
                   />
                   <Key className="w-4 h-4 text-cyan-500 absolute left-3 top-3" />
+                </div>
+              </div>
+            )}
+
+            {/* DeepSeek Key */}
+            {provider === 'deepseek' && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">DeepSeek API Key</span>
+                    {currentConfig?.savedKeys?.deepseek && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded font-semibold">
+                        ✓ Saved ({currentConfig.provider === 'deepseek' ? currentConfig.maskedKey : 'Active'})
+                      </span>
+                    )}
+                  </div>
+                  <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline">
+                    Get DeepSeek Key ↗
+                  </a>
+                </div>
+                <div className="relative">
+                  <input
+                    type="password"
+                    value={deepseekKey}
+                    onChange={(e) => setDeepseekKey(e.target.value)}
+                    placeholder={currentConfig?.savedKeys?.deepseek ? "Key already saved (type to replace)" : "Paste DeepSeek API Key (sk-...)"}
+                    className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none dark:text-white font-mono"
+                  />
+                  <Key className="w-4 h-4 text-blue-500 absolute left-3 top-3" />
                 </div>
               </div>
             )}
@@ -450,7 +541,16 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
               className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/20 flex items-center gap-2 disabled:opacity-50"
             >
               {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
-              <span>Save &amp; Connect Antigravity Agent</span>
+              <span>
+                Save &amp; Connect {
+                  provider === 'deepseek' ? 'DeepSeek Engine' :
+                  provider === 'opencode' ? 'OpenCode Agent' :
+                  provider === 'openrouter' ? 'OpenRouter Engine' :
+                  provider === 'openai' ? 'OpenAI Model' :
+                  provider === 'gemini' ? 'Gemini Engine' :
+                  'Antigravity Agent'
+                }
+              </span>
             </button>
           </div>
         </form>

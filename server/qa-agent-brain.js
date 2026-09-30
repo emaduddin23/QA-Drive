@@ -33,6 +33,7 @@ export class QAAgentBrain {
     if (!apiKey) {
       if (provider === 'antigravity') apiKey = process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
       else if (provider === 'opencode') apiKey = process.env.OPENCODE_API_KEY;
+      else if (provider === 'deepseek') apiKey = process.env.DEEPSEEK_API_KEY;
       else if (provider === 'openrouter') apiKey = process.env.OPENROUTER_API_KEY;
       else if (provider === 'openai') apiKey = process.env.OPENAI_API_KEY;
       else apiKey = process.env.GEMINI_API_KEY;
@@ -43,6 +44,7 @@ export class QAAgentBrain {
         const modelName = selectedModel || (
           provider === 'antigravity' ? 'antigravity-2.0-pro' :
           provider === 'opencode' ? 'opencode-zenith-1' :
+          provider === 'deepseek' ? 'deepseek-chat' :
           provider === 'openrouter' ? 'anthropic/claude-3.5-sonnet' :
           provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'
         );
@@ -74,54 +76,60 @@ export class QAAgentBrain {
       addTrace(4, "Autonomous QA Brain Engine", "No external LLM API Key detected. Using pre-packaged Autonomous RAG QA Engine.");
     }
 
-    const defaultTarget = targetUrl || 'https://example.com';
-    const testCases = [
+    const extractedUrlMatch = userPrompt.match(/(https?:\/\/[^\s]+)/i);
+    const resolvedTargetUrl = extractedUrlMatch ? extractedUrlMatch[1] : (targetUrl || 'https://example.com');
+    
+    // Extract Email & Password if present in prompt
+    const emailMatch = userPrompt.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+    const passMatch = userPrompt.match(/(?:pass|password)\s+([^\s]+)/i);
+    const emailVal = emailMatch ? emailMatch[1] : 'user@example.com';
+    const passVal = passMatch ? passMatch[1] : 'Password123!';
+
+    const dynamicTestCases = [
       {
-        id: "TC-BVA-01",
-        title: "BVA Minimum Invalid Below Boundary (Qty: 0)",
-        technique: "Boundary Value Analysis (MIN-1)",
-        kbReference: "Test Techniques/Boundary Value Analysis.md",
-        expectedResult: "Validation Error: Quantity must be at least 1 item",
-        shouldPass: false,
-        actions: [
-          { type: "goto", url: defaultTarget },
-          { type: "fill", selector: "#quantity-input", value: "0" },
-          { type: "click", selector: "#update-qty-btn" },
-          { type: "wait", timeout: 300 }
-        ]
-      },
-      {
-        id: "TC-BVA-02",
-        title: "BVA Minimum Valid Boundary (Qty: 1)",
-        technique: "Boundary Value Analysis (MIN)",
-        kbReference: "Test Techniques/Boundary Value Analysis.md",
-        expectedResult: "Subtotal: $49.00, Total: $54.00, No Error",
+        id: "TC-AUTH-01",
+        title: `Authentication & Login Flow (${emailVal})`,
+        technique: "Functional Authentication Testing",
+        kbReference: "QA Fundamentals/Functional Testing.md",
+        expectedResult: "User successfully logs in and accesses feed/dashboard",
         shouldPass: true,
         actions: [
-          { type: "goto", url: defaultTarget },
-          { type: "fill", selector: "#quantity-input", value: "1" },
-          { type: "click", selector: "#update-qty-btn" },
-          { type: "wait", timeout: 300 }
+          { type: "goto", url: resolvedTargetUrl },
+          { type: "fill", selector: "input[type='email'], input[name='email'], #email, input[placeholder*='email' i]", value: emailVal },
+          { type: "fill", selector: "input[type='password'], input[name='password'], #password, input[placeholder*='pass' i]", value: passVal },
+          { type: "click", selector: "button[type='submit'], button:has-text('Login'), button:has-text('Sign In')" },
+          { type: "wait", timeout: 2000 }
         ]
       },
       {
-        id: "TC-EP-08",
-        title: "Equivalence Partitioning: Invalid Promo Code",
-        technique: "Equivalence Partitioning",
+        id: "TC-NAV-02",
+        title: "Navigation & Content Feed Load Verification",
+        technique: "Smoke & Sanity Testing",
+        kbReference: "QA Fundamentals/Smoke & Sanity Testing.md",
+        expectedResult: "Website feed and interactive layout elements render without JS console errors",
+        shouldPass: true,
+        actions: [
+          { type: "goto", url: resolvedTargetUrl },
+          { type: "wait", timeout: 1500 },
+          { type: "click", selector: "nav a, header a, button" }
+        ]
+      },
+      {
+        id: "TC-VAL-03",
+        title: "Negative Form Validation & Empty Submit Check",
+        technique: "Boundary Value Analysis & Equivalence Partitioning",
         kbReference: "Test Techniques/Equivalence Partitioning.md",
-        expectedResult: "Error: Invalid promo code",
+        expectedResult: "Invalid credentials or empty inputs trigger proper error banner",
         shouldPass: false,
         actions: [
-          { type: "goto", url: defaultTarget },
-          { type: "fill", selector: "#quantity-input", value: "1" },
-          { type: "fill", selector: "#coupon-input", value: "EXPIRED99" },
-          { type: "click", selector: "#apply-coupon-btn" },
-          { type: "wait", timeout: 300 }
+          { type: "goto", url: resolvedTargetUrl },
+          { type: "fill", selector: "input[type='email'], input[name='email']", value: "invalid_email@test" },
+          { type: "click", selector: "button[type='submit']" }
         ]
       }
     ];
 
-    addTrace(5, "Test Plan Synthesis", `Generated ${testCases.length} QA Test Cases combining BVA boundary rules & historical bug mitigations.`);
+    addTrace(5, "Test Plan Synthesis", `Generated ${dynamicTestCases.length} targeted QA Test Cases for ${resolvedTargetUrl}.`);
 
     return {
       logTrace,
@@ -130,8 +138,8 @@ export class QAAgentBrain {
         category: d.category,
         snippet: d.content.substring(0, 150) + '...'
       })),
-      targetUrl: defaultTarget,
-      testCases
+      targetUrl: resolvedTargetUrl,
+      testCases: dynamicTestCases
     };
   }
 
@@ -351,6 +359,27 @@ ${knowledgeText}
         },
         body: JSON.stringify({
           model: modelName || 'anthropic/claude-3.5-sonnet',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.choices?.[0]?.message?.content;
+      return cleanJsonResponse(text);
+    } else if (provider === 'deepseek') {
+      const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: modelName || 'deepseek-chat',
+          response_format: { type: 'json_object' },
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }

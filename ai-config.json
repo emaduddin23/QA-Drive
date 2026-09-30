@@ -1,0 +1,9 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "antigravityKey": "",
+  "opencodeKey": "",
+  "geminiKey": "",
+  "openaiKey": "",
+  "openrouterKey": ""
+}

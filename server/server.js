@@ -10,6 +10,24 @@ import { runPlaywrightSuite, startInteractiveSession, executeInteractiveActions,
 import { startAutonomousTesting, stopAutonomousTesting } from './autonomous-agent.js';
 import { driveSyncService } from './google-drive-sync.js';
 
+// Load environment variables from .env file if present
+const ENV_FILE = path.resolve(process.cwd(), '.env');
+if (fs.existsSync(ENV_FILE)) {
+  try {
+    const envLines = fs.readFileSync(ENV_FILE, 'utf8').split('\n');
+    for (const line of envLines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+        const [key, ...valParts] = trimmed.split('=');
+        const val = valParts.join('=').trim().replace(/^["']|["']$/g, '');
+        if (key && val && !process.env[key.trim()]) {
+          process.env[key.trim()] = val;
+        }
+      }
+    }
+  } catch (e) {}
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -139,6 +157,7 @@ function loadAiConfig() {
     model: process.env.SELECTED_AI_MODEL || 'antigravity-2.0-pro',
     antigravityKey: process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY || '',
     opencodeKey: process.env.OPENCODE_API_KEY || '',
+    deepseekKey: process.env.DEEPSEEK_API_KEY || '',
     geminiKey: process.env.GEMINI_API_KEY || '',
     openaiKey: process.env.OPENAI_API_KEY || '',
     openrouterKey: process.env.OPENROUTER_API_KEY || ''
@@ -173,6 +192,8 @@ app.get('/api/ai/config', (req, res) => {
     activeKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY || '';
   } else if (activeAiConfig.provider === 'opencode') {
     activeKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY || '';
+  } else if (activeAiConfig.provider === 'deepseek') {
+    activeKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY || '';
   } else if (activeAiConfig.provider === 'openrouter') {
     activeKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY || '';
   } else if (activeAiConfig.provider === 'openai') {
@@ -189,6 +210,7 @@ app.get('/api/ai/config', (req, res) => {
     savedKeys: {
       antigravity: Boolean(activeAiConfig.antigravityKey),
       opencode: Boolean(activeAiConfig.opencodeKey),
+      deepseek: Boolean(activeAiConfig.deepseekKey),
       gemini: Boolean(activeAiConfig.geminiKey),
       openai: Boolean(activeAiConfig.openaiKey),
       openrouter: Boolean(activeAiConfig.openrouterKey)
@@ -198,7 +220,7 @@ app.get('/api/ai/config', (req, res) => {
 
 // POST Save AI Provider, API Keys & Model
 app.post('/api/ai/config', (req, res) => {
-  const { provider, model, apiKey, antigravityKey, opencodeKey, geminiKey, openaiKey, openrouterKey } = req.body;
+  const { provider, model, apiKey, antigravityKey, opencodeKey, deepseekKey, geminiKey, openaiKey, openrouterKey } = req.body;
 
   if (provider) activeAiConfig.provider = provider;
   if (model) activeAiConfig.model = model;
@@ -210,6 +232,10 @@ app.post('/api/ai/config', (req, res) => {
   if (opencodeKey !== undefined && opencodeKey.trim() !== '') {
     activeAiConfig.opencodeKey = opencodeKey.trim();
     process.env.OPENCODE_API_KEY = opencodeKey.trim();
+  }
+  if (deepseekKey !== undefined && deepseekKey.trim() !== '') {
+    activeAiConfig.deepseekKey = deepseekKey.trim();
+    process.env.DEEPSEEK_API_KEY = deepseekKey.trim();
   }
   if (geminiKey !== undefined && geminiKey.trim() !== '') {
     activeAiConfig.geminiKey = geminiKey.trim();
@@ -233,6 +259,9 @@ app.post('/api/ai/config', (req, res) => {
     } else if (activeAiConfig.provider === 'opencode') {
       activeAiConfig.opencodeKey = keyTrimmed;
       process.env.OPENCODE_API_KEY = keyTrimmed;
+    } else if (activeAiConfig.provider === 'deepseek') {
+      activeAiConfig.deepseekKey = keyTrimmed;
+      process.env.DEEPSEEK_API_KEY = keyTrimmed;
     } else if (activeAiConfig.provider === 'openrouter') {
       activeAiConfig.openrouterKey = keyTrimmed;
       process.env.OPENROUTER_API_KEY = keyTrimmed;
@@ -251,6 +280,7 @@ app.post('/api/ai/config', (req, res) => {
   let activeKey = '';
   if (activeAiConfig.provider === 'antigravity') activeKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
   else if (activeAiConfig.provider === 'opencode') activeKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
+  else if (activeAiConfig.provider === 'deepseek') activeKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
   else if (activeAiConfig.provider === 'openrouter') activeKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
   else if (activeAiConfig.provider === 'openai') activeKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
   else activeKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
@@ -278,6 +308,7 @@ app.post('/api/test/plan', async (req, res) => {
   let currentKey = '';
   if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
   else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
+  else if (activeAiConfig.provider === 'deepseek') currentKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
   else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
   else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
   else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
@@ -311,6 +342,7 @@ app.post('/api/test/autonomous/start', async (req, res) => {
     let currentKey = '';
     if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
     else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
+    else if (activeAiConfig.provider === 'deepseek') currentKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
     else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
     else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
     else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
@@ -347,7 +379,25 @@ app.post('/api/ai/validate-key', async (req, res) => {
   if (key.trim().length < 8) {
     return res.json({ valid: false, error: 'API key appears too short.' });
   }
-  // For OpenCode, optionally perform a lightweight test request
+  // For DeepSeek, perform a lightweight models query to verify authorization
+  if (provider === 'deepseek') {
+    try {
+      const testRes = await fetch('https://api.deepseek.com/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${key.trim()}`,
+        }
+      });
+      if (!testRes.ok) {
+        const errData = await testRes.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `Invalid key (HTTP ${testRes.status})`;
+        return res.json({ valid: false, error: `DeepSeek API key validation failed: ${errMsg}` });
+      }
+    } catch (e) {
+      return res.json({ valid: false, error: `DeepSeek validation error: ${e.message}` });
+    }
+  }
+  // For OpenCode, perform a lightweight test request
   if (provider === 'opencode') {
     try {
       const testRes = await fetch('https://api.openode.ai/v1/models/opencode-coder-7b/completions', {
@@ -366,7 +416,6 @@ app.post('/api/ai/validate-key', async (req, res) => {
       return res.json({ valid: false, error: `OpenCode validation error: ${e.message}` });
     }
   }
-  // Add similar checks for other providers as needed
   return res.json({ valid: true });
 });
 app.post('/api/test/autonomous/stop', async (req, res) => {
@@ -397,6 +446,7 @@ app.post('/api/test/interactive/execute', async (req, res) => {
     let currentKey = '';
     if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
     else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
+    else if (activeAiConfig.provider === 'deepseek') currentKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
     else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
     else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
     else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
