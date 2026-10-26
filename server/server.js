@@ -387,8 +387,9 @@ app.post('/api/ai/validate-key', async (req, res) => {
     try {
       const baseUrl = (reqBaseUrl || activeAiConfig.ninerouterBaseUrl || process.env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1').replace(/\/+$/, '');
       const headers = {};
-      if (key && key.trim()) {
-        headers['Authorization'] = `Bearer ${key.trim()}`;
+      const activeKey = (key && key.trim()) || activeAiConfig.ninerouterKey || process.env.NINEROUTER_API_KEY || '';
+      if (activeKey) {
+        headers['Authorization'] = `Bearer ${activeKey}`;
       }
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);

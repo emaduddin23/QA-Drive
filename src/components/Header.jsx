@@ -79,10 +79,7 @@ export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpe
             >
               {isAiConnected ? (
                 <>
-                  <span className="relative flex h-2 w-2 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 shrink-0"></span>
                   <span>{aiStatus?.isCliConnected ? 'ANTIGRAVITY (CLI):' : `${aiStatus?.provider?.toUpperCase()}:`}</span>
                   <span className="text-emerald-600 dark:text-emerald-400 font-bold">Connected ✓</span>
                 </>
@@ -107,7 +104,7 @@ export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpe
               }`}
               title="Click to manage Playwright MCP Connection"
             >
-              <span className={`w-2 h-2 rounded-full shrink-0 ${isExecuting ? 'bg-indigo-500 animate-ping' : isMcpConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`}></span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isExecuting ? 'bg-indigo-500 shadow-sm shadow-indigo-500/50' : isMcpConnected ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : 'bg-amber-400'}`}></span>
               <span>MCP:</span>
               <span className="font-bold">
                 {isExecuting ? 'Executing' : isMcpConnected ? 'Connected ✓' : 'Offline'}

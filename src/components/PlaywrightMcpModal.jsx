@@ -8,28 +8,19 @@ export default function PlaywrightMcpModal({ isOpen, onClose, isMcpConnected, is
 
   useEffect(() => {
     if (isOpen) {
-      fetchMcpInfo();
       pingServer();
     }
   }, [isOpen]);
-
-  const fetchMcpInfo = async () => {
-    try {
-      const res = await fetch('/api/mcp/status');
-      const data = await res.json();
-      setMcpInfo(data);
-    } catch (e) {
-      console.error("Failed to fetch MCP status:", e);
-    }
-  };
 
   const pingServer = async () => {
     setIsPinging(true);
     const start = performance.now();
     try {
-      await fetch('/api/mcp/status');
+      const res = await fetch('/api/mcp/status');
+      const data = await res.json();
       const end = performance.now();
       setLatency(Math.round(end - start));
+      setMcpInfo(data);
     } catch (e) {
       setLatency(null);
     } finally {
@@ -40,8 +31,9 @@ export default function PlaywrightMcpModal({ isOpen, onClose, isMcpConnected, is
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-      <div className="glass-panel w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      <div className="fixed inset-0 bg-black/60 animate-fadeIn" onClick={onClose} />
+      <div className="glass-panel relative z-10 w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto animate-modalPop">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-3">

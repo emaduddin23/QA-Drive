@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Key, CheckCircle, AlertCircle, RefreshCw, Cpu, Zap, Globe, ChevronDown, Code, Bot, Route } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { X, Sparkles, Key, CheckCircle, AlertCircle, RefreshCw, Cpu, Zap, Globe, ChevronDown, Code, Bot, Route, Search } from 'lucide-react';
 
 export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
   const [provider, setProvider] = useState('opencode');
   const [model, setModel] = useState('opencode-coder-7b');
   const [customModelInput, setCustomModelInput] = useState('');
+  const [modelSearch, setModelSearch] = useState('');
 
   const [antigravityKey, setAntigravityKey] = useState('');
   const [opencodeKey, setOpencodeKey] = useState('');
@@ -20,7 +21,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
   const [currentConfig, setCurrentConfig] = useState(null);
   const [dynamicModels, setDynamicModels] = useState({ '9router': [] });
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const debounceTimerRef = React.useRef(null);
+  const debounceTimerRef = useRef(null);
 
   const modelOptions = {
     '9router': [
@@ -71,13 +72,46 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
     ]
   };
 
+  const { freeList, standardList, totalMatches } = useMemo(() => {
+    const fullList = (provider === '9router' && dynamicModels['9router']?.length > 0)
+      ? dynamicModels['9router']
+      : (modelOptions[provider] || []);
+
+    const q = modelSearch.trim().toLowerCase();
+    const filtered = q
+      ? fullList.filter(m => (m.id || '').toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q))
+      : fullList;
+
+    const free = [];
+    const standard = [];
+
+    for (let i = 0; i < filtered.length; i++) {
+      const m = filtered[i];
+      if (m.id === 'custom') continue;
+      if (m.isFree || /(:free|-free|\bfree\b)/i.test(m.id)) {
+        free.push(m);
+      } else {
+        standard.push(m);
+      }
+    }
+
+    // Cap standard items at 120 if no search term, keeping DOM lightweight & ultra-fast
+    const displayStandard = q ? standard : standard.slice(0, 120);
+
+    return {
+      freeList: free,
+      standardList: displayStandard,
+      totalMatches: filtered.length
+    };
+  }, [provider, dynamicModels, modelSearch]);
+
   useEffect(() => {
     if (isOpen) {
       fetchConfig();
     }
   }, [isOpen]);
 
-  const fetchModelsFrom9Router = async (keyToUse, urlToUse, notify = false) => {
+  const fetchModelsFrom9Router = async (keyToUse, urlToUse, notify = false, preferredModel = null) => {
     setIsLoadingModels(true);
     try {
       const res = await fetch('/api/ai/models', {
@@ -95,7 +129,10 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
           ...prev,
           '9router': data.models
         }));
-        if (!data.models.some(m => m.id === model) && model !== 'custom') {
+        const targetToSelect = preferredModel || model;
+        if (targetToSelect && data.models.some(m => m.id === targetToSelect)) {
+          setModel(targetToSelect);
+        } else if (!data.models.some(m => m.id === model) && model !== 'custom' && model !== '') {
           setModel(data.models[0].id);
         }
         if (notify) {
@@ -140,14 +177,16 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
       if (data.provider) setProvider(data.provider);
       if (data.ninerouterBaseUrl) setNinerouterBaseUrl(data.ninerouterBaseUrl);
       if (data.provider === '9router') {
-        fetchModelsFrom9Router(data.ninerouterKey || '', data.ninerouterBaseUrl, false);
+        fetchModelsFrom9Router(data.ninerouterKey || '', data.ninerouterBaseUrl, false, data.model);
       }
       if (data.model) {
         setModel(data.model);
-        const existing = modelOptions[data.provider || 'antigravity']?.find(m => m.id === data.model);
-        if (!existing && data.model) {
-          setModel('custom');
-          setCustomModelInput(data.model);
+        if (data.provider !== '9router') {
+          const existing = modelOptions[data.provider || 'antigravity']?.find(m => m.id === data.model);
+          if (!existing && data.model) {
+            setModel('custom');
+            setCustomModelInput(data.model);
+          }
         }
       }
     } catch (e) {
@@ -258,8 +297,9 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-      <div className="glass-panel w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+      <div className="fixed inset-0 bg-black/60 animate-fadeIn" onClick={onClose} />
+      <div className="glass-panel relative z-10 w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 space-y-5 max-h-[92vh] overflow-y-auto animate-modalPop">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
           <div className="flex items-center gap-3">
@@ -453,10 +493,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
             {provider === '9router' && (
               <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px]">
                 <div className="flex items-center gap-1.5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 shrink-0"></span>
                   <span className="font-bold text-emerald-700 dark:text-emerald-400">
                     {(() => {
                       const list = dynamicModels['9router']?.length > 0 ? dynamicModels['9router'] : modelOptions['9router'];
@@ -485,6 +522,20 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
               </div>
             )}
 
+            {/* Quick Model Search Filter for 9Router */}
+            {provider === '9router' && (
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                <input
+                  type="text"
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  placeholder="Filter 800+ models (e.g. 'kilo', 'free', 'claude', 'deepseek')..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white font-sans"
+                />
+              </div>
+            )}
+
             <div className="relative">
               <select
                 value={model}
@@ -493,39 +544,27 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
               >
                 {provider === '9router' ? (
                   <>
-                    {(() => {
-                      const fullList = dynamicModels['9router']?.length > 0
-                        ? dynamicModels['9router']
-                        : modelOptions['9router'];
-                      const freeList = fullList.filter(m => m.isFree || /(:free|-free|\bfree\b)/i.test(m.id));
-                      const standardList = fullList.filter(m => !(m.isFree || /(:free|-free|\bfree\b)/i.test(m.id)) && m.id !== 'custom');
-
-                      return (
-                        <>
-                          {freeList.length > 0 && (
-                            <optgroup label={`🟢 FREE MODELS (${freeList.length} AVAILABLE - ZERO TOKEN COST)`}>
-                              {freeList.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.name.startsWith('🟢') ? m.name : `🟢 [FREE] ${m.name}`}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {standardList.length > 0 && (
-                            <optgroup label="⚡ STANDARD & REASONING MODELS">
-                              {standardList.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.name}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          <optgroup label="✏️ CUSTOM MODEL">
-                            <option value="custom">✏️ Enter Custom 9Router Model...</option>
-                          </optgroup>
-                        </>
-                      );
-                    })()}
+                    {freeList.length > 0 && (
+                      <optgroup label={`🟢 FREE MODELS (${freeList.length} AVAILABLE - ZERO TOKEN COST)`}>
+                        {freeList.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name.startsWith('🟢') ? m.name : `🟢 [FREE] ${m.name}`}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {standardList.length > 0 && (
+                      <optgroup label={`⚡ STANDARD MODELS (${standardList.length}${totalMatches > standardList.length ? ` of ${totalMatches} shown` : ''})`}>
+                        {standardList.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <optgroup label="✏️ CUSTOM MODEL">
+                      <option value="custom">✏️ Enter Custom 9Router Model...</option>
+                    </optgroup>
                   </>
                 ) : (
                   (modelOptions[provider] || []).map((m) => (

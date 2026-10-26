@@ -29,6 +29,7 @@ export class QAAgentBrain {
 
     // Determine Key & Model
     const isAntigravityCli = (provider === 'antigravity');
+    const isNineRouter = (provider === '9router' || provider === 'ninerouter');
     let apiKey = customApiKey;
     if (!apiKey) {
       if (provider === 'antigravity') apiKey = process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
@@ -36,20 +37,22 @@ export class QAAgentBrain {
       else if (provider === 'deepseek') apiKey = process.env.DEEPSEEK_API_KEY;
       else if (provider === 'openrouter') apiKey = process.env.OPENROUTER_API_KEY;
       else if (provider === 'openai') apiKey = process.env.OPENAI_API_KEY;
+      else if (isNineRouter) apiKey = process.env.NINEROUTER_API_KEY || process.env['9ROUTER_API_KEY'] || '';
       else apiKey = process.env.GEMINI_API_KEY;
     }
 
-    if (isAntigravityCli || apiKey) {
+    if (isAntigravityCli || isNineRouter || apiKey) {
       try {
         const modelName = selectedModel || (
           provider === 'antigravity' ? 'antigravity-2.0-pro' :
           provider === 'opencode' ? 'opencode-zenith-1' :
           provider === 'deepseek' ? 'deepseek-chat' :
           provider === 'openrouter' ? 'anthropic/claude-3.5-sonnet' :
-          provider === 'openai' ? 'gpt-4o-mini' : 'gemini-1.5-flash'
+          provider === 'openai' ? 'gpt-4o-mini' :
+          isNineRouter ? 'kgw/kilo-auto/free' : 'gemini-1.5-flash'
         );
 
-        addTrace(4, "Google Antigravity AI Engine", `Invoking Google Antigravity CLI / Subscription (${modelName})...`);
+        addTrace(4, isNineRouter ? "9Router Gateway Engine" : "Google Antigravity AI Engine", `Invoking ${isNineRouter ? '9Router Gateway' : 'Google Antigravity CLI / Subscription'} (${modelName})...`);
 
         const llmResult = await this.callLlmApi({
           apiKey,
@@ -286,9 +289,20 @@ ${knowledgeText}
       } else if (cleaned.startsWith('```')) {
         cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
+      cleaned = cleaned.trim();
+
       const firstBrace = cleaned.indexOf('{');
+      const firstBracket = cleaned.indexOf('[');
       const lastBrace = cleaned.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const lastBracket = cleaned.lastIndexOf(']');
+
+      // Support array responses (e.g. interactive action sequences) as well as object responses
+      const isArrayRoot = (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) &&
+                          (lastBracket !== -1 && (lastBrace === -1 || lastBracket > lastBrace));
+
+      if (isArrayRoot) {
+        cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+      } else if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
         cleaned = cleaned.substring(firstBrace, lastBrace + 1);
       }
       return JSON.parse(cleaned);
