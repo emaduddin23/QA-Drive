@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Key, CheckCircle, AlertCircle, RefreshCw, Cpu, Zap, Globe, ChevronDown, Code, Bot } from 'lucide-react';
+import { X, Sparkles, Key, CheckCircle, AlertCircle, RefreshCw, Cpu, Zap, Globe, ChevronDown, Code, Bot, Route } from 'lucide-react';
 
 export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
   const [provider, setProvider] = useState('opencode');
@@ -12,12 +12,28 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
   const [openrouterKey, setOpenrouterKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [openaiKey, setOpenaiKey] = useState('');
+  const [ninerouterKey, setNinerouterKey] = useState('');
+  const [ninerouterBaseUrl, setNinerouterBaseUrl] = useState('http://localhost:20128/v1');
 
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null);
   const [currentConfig, setCurrentConfig] = useState(null);
+  const [dynamicModels, setDynamicModels] = useState({ '9router': [] });
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const debounceTimerRef = React.useRef(null);
 
   const modelOptions = {
+    '9router': [
+      { id: 'ocz/deepseek-v4-flash-free', name: '🟢 [FREE] DeepSeek V4 Flash Free (No API Cost)', isFree: true },
+      { id: 'ocz/mimo-v2.6-flash-free', name: '🟢 [FREE] Mimo V2.6 Flash Free (No API Cost)', isFree: true },
+      { id: 'opencode-go/space-bunny-free', name: '🟢 [FREE] Space Bunny Free (No API Cost)', isFree: true },
+      { id: 'kr/claude-sonnet-4.5', name: 'Claude Sonnet 4.5 (9Router Smart Fallback)' },
+      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (via 9Router)' },
+      { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3 / Chat (via 9Router)' },
+      { id: 'openai/gpt-4o', name: 'GPT-4o (via 9Router)' },
+      { id: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash (via 9Router)' },
+      { id: 'custom', name: '✏️ Enter Custom 9Router Model...' }
+    ],
     antigravity: [
       { id: 'antigravity-2.0-pro', name: 'Antigravity 2.0 Pro (Autonomous QA Agent)' },
       { id: 'antigravity-2.0-flash', name: 'Antigravity 2.0 Flash (Fast Reasoning)' },
@@ -61,12 +77,71 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
     }
   }, [isOpen]);
 
+  const fetchModelsFrom9Router = async (keyToUse, urlToUse, notify = false) => {
+    setIsLoadingModels(true);
+    try {
+      const res = await fetch('/api/ai/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: '9router',
+          key: keyToUse !== undefined ? keyToUse : ninerouterKey,
+          baseUrl: urlToUse !== undefined ? urlToUse : ninerouterBaseUrl
+        })
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.models) && data.models.length > 0) {
+        setDynamicModels(prev => ({
+          ...prev,
+          '9router': data.models
+        }));
+        if (!data.models.some(m => m.id === model) && model !== 'custom') {
+          setModel(data.models[0].id);
+        }
+        if (notify) {
+          setStatusMsg({
+            type: 'success',
+            text: `Successfully fetched ${data.models.length} models from 9Router!`
+          });
+        }
+      } else if (notify && data.error) {
+        setStatusMsg({ type: 'error', text: data.error });
+      }
+    } catch (err) {
+      if (notify) {
+        setStatusMsg({ type: 'error', text: `Failed to fetch 9Router models: ${err.message}` });
+      }
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
+
+  const handle9RouterKeyChange = (newKey) => {
+    setNinerouterKey(newKey);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      fetchModelsFrom9Router(newKey, ninerouterBaseUrl, false);
+    }, 600);
+  };
+
+  const handle9RouterKeyPaste = (e) => {
+    const pasted = e.clipboardData.getData('text');
+    if (pasted && pasted.trim()) {
+      setNinerouterKey(pasted.trim());
+      fetchModelsFrom9Router(pasted.trim(), ninerouterBaseUrl, true);
+    }
+  };
+
   const fetchConfig = async () => {
     try {
       const res = await fetch('/api/ai/config');
       const data = await res.json();
       setCurrentConfig(data);
       if (data.provider) setProvider(data.provider);
+      if (data.ninerouterBaseUrl) setNinerouterBaseUrl(data.ninerouterBaseUrl);
+      if (data.provider === '9router') {
+        fetchModelsFrom9Router(data.ninerouterKey || '', data.ninerouterBaseUrl, false);
+      }
       if (data.model) {
         setModel(data.model);
         const existing = modelOptions[data.provider || 'antigravity']?.find(m => m.id === data.model);
@@ -83,7 +158,13 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
   const handleProviderChange = (newProvider) => {
     setProvider(newProvider);
     setStatusMsg(null);
-    const defaultModel = modelOptions[newProvider]?.[0]?.id || '';
+    if (newProvider === '9router') {
+      fetchModelsFrom9Router(ninerouterKey, ninerouterBaseUrl, false);
+    }
+    const available = (newProvider === '9router' && dynamicModels['9router']?.length > 0)
+      ? dynamicModels['9router']
+      : (modelOptions[newProvider] || []);
+    const defaultModel = available[0]?.id || '';
     setModel(defaultModel);
   };
 
@@ -101,26 +182,31 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
       deepseek: deepseekKey.trim(),
       openrouter: openrouterKey.trim(),
       openai: openaiKey.trim(),
-      gemini: geminiKey.trim()
+      gemini: geminiKey.trim(),
+      '9router': ninerouterKey.trim()
     };
     const keyToValidate = keyMap[provider] || '';
 
-    // If a key is provided, validate it before saving configuration
-    if (keyToValidate) {
+    // If a key is provided, or if 9router is selected, validate before saving configuration
+    if (keyToValidate || provider === '9router') {
       try {
         const validateRes = await fetch('/api/ai/validate-key', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, key: keyToValidate })
+          body: JSON.stringify({
+            provider,
+            key: keyToValidate,
+            baseUrl: ninerouterBaseUrl.trim()
+          })
         });
         const validateData = await validateRes.json();
         if (!validateData.valid) {
-          setStatusMsg({ type: 'error', text: validateData.error || 'Invalid API key.' });
+          setStatusMsg({ type: 'error', text: validateData.error || 'Validation failed.' });
           setIsSaving(false);
           return;
         }
       } catch (e) {
-        setStatusMsg({ type: 'error', text: 'Error validating API key.' });
+        setStatusMsg({ type: 'error', text: 'Error validating AI settings.' });
         setIsSaving(false);
         return;
       }
@@ -138,7 +224,9 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
           deepseekKey: deepseekKey.trim() || undefined,
           openrouterKey: openrouterKey.trim() || undefined,
           geminiKey: geminiKey.trim() || undefined,
-          openaiKey: openaiKey.trim() || undefined
+          openaiKey: openaiKey.trim() || undefined,
+          ninerouterKey: ninerouterKey.trim() || undefined,
+          ninerouterBaseUrl: ninerouterBaseUrl.trim() || undefined
         })
       });
       const data = await res.json();
@@ -150,7 +238,8 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
           deepseek: 'DeepSeek Engine',
           openrouter: 'OpenRouter Engine',
           gemini: 'Google Gemini Engine',
-          openai: 'OpenAI Model'
+          openai: 'OpenAI Model',
+          '9router': '9Router Gateway'
         };
         const label = providerLabels[provider] || 'AI Engine';
         setStatusMsg({ type: 'success', text: `${label} configuration saved successfully!` });
@@ -232,7 +321,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
           {/* Provider Selection Cards */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 dark:text-slate-300">1. Select AI Provider</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
               <button
                 type="button"
                 onClick={() => handleProviderChange('antigravity')}
@@ -246,6 +335,21 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
                   <Bot className="w-3 h-3 text-indigo-500" />
                 </div>
                 <span className="text-[9px] text-slate-500 truncate">2.0 Pro</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleProviderChange('9router')}
+                className={`p-2 rounded-xl border text-left transition flex flex-col gap-1 ${provider === '9router'
+                    ? 'bg-amber-500/10 border-amber-500 text-slate-900 dark:text-white ring-2 ring-amber-500/20 font-bold'
+                    : 'bg-slate-50 dark:bg-slate-950/80 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                  }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[11px]">9Router</span>
+                  <Route className="w-3 h-3 text-amber-500" />
+                </div>
+                <span className="text-[9px] text-slate-500 truncate">Gateway / Local</span>
               </button>
 
               <button
@@ -327,18 +431,109 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
 
           {/* 2. Model Selection Dropdown */}
           <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">2. Select AI Model</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">2. Select AI Model</label>
+              {provider === '9router' && (
+                <button
+                  type="button"
+                  onClick={() => fetchModelsFrom9Router(ninerouterKey, ninerouterBaseUrl, true)}
+                  disabled={isLoadingModels}
+                  className="text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-semibold flex items-center gap-1 transition"
+                  title="Fetch all live models from 9Router"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isLoadingModels ? 'Fetching Models...' : dynamicModels['9router']?.length > 0 ? `Refresh Models (${dynamicModels['9router'].length} loaded)` : 'Fetch 9Router Models'}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Mention Free Model status prominently above the model name */}
+            {provider === '9router' && (
+              <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                    {(() => {
+                      const list = dynamicModels['9router']?.length > 0 ? dynamicModels['9router'] : modelOptions['9router'];
+                      const freeCount = list.filter(m => m.isFree || /(:free|-free|\bfree\b)/i.test(m.id)).length;
+                      const isCurrentFree = /(:free|-free|\bfree\b)/i.test(model);
+                      if (isCurrentFree) {
+                        return `Selected: 🟢 FREE MODEL (No API cost) • ${freeCount} Free Models Available`;
+                      }
+                      return `🎁 ${freeCount} Free Models Available Above in Dropdown (Zero API Cost)`;
+                    })()}
+                  </span>
+                </div>
+                {!/(:free|-free|\bfree\b)/i.test(model) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const list = dynamicModels['9router']?.length > 0 ? dynamicModels['9router'] : modelOptions['9router'];
+                      const firstFree = list.find(m => m.isFree || /(:free|-free|\bfree\b)/i.test(m.id));
+                      if (firstFree) setModel(firstFree.id);
+                    }}
+                    className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 underline hover:opacity-80"
+                  >
+                    Switch to Free Model ↗
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="relative">
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full pl-3 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white font-medium appearance-none"
               >
-                {(modelOptions[provider] || []).map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
+                {provider === '9router' ? (
+                  <>
+                    {(() => {
+                      const fullList = dynamicModels['9router']?.length > 0
+                        ? dynamicModels['9router']
+                        : modelOptions['9router'];
+                      const freeList = fullList.filter(m => m.isFree || /(:free|-free|\bfree\b)/i.test(m.id));
+                      const standardList = fullList.filter(m => !(m.isFree || /(:free|-free|\bfree\b)/i.test(m.id)) && m.id !== 'custom');
+
+                      return (
+                        <>
+                          {freeList.length > 0 && (
+                            <optgroup label={`🟢 FREE MODELS (${freeList.length} AVAILABLE - ZERO TOKEN COST)`}>
+                              {freeList.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name.startsWith('🟢') ? m.name : `🟢 [FREE] ${m.name}`}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {standardList.length > 0 && (
+                            <optgroup label="⚡ STANDARD & REASONING MODELS">
+                              {standardList.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <optgroup label="✏️ CUSTOM MODEL">
+                            <option value="custom">✏️ Enter Custom 9Router Model...</option>
+                          </optgroup>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  (modelOptions[provider] || []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))
+                )}
               </select>
               <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
             </div>
@@ -376,6 +571,71 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
                     className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/80 border border-indigo-500/30 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:text-white font-mono"
                   />
                   <Bot className="w-4 h-4 text-indigo-500 absolute left-3 top-3" />
+                </div>
+              </div>
+            )}
+
+            {/* 9Router Config */}
+            {provider === '9router' && (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">9Router Gateway Base URL</span>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold font-mono">
+                      Default: http://localhost:20128/v1
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={ninerouterBaseUrl}
+                      onChange={(e) => setNinerouterBaseUrl(e.target.value)}
+                      placeholder="http://localhost:20128/v1"
+                      className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/80 border border-amber-500/30 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none dark:text-white font-mono"
+                    />
+                    <Route className="w-4 h-4 text-amber-500 absolute left-3 top-3" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">9Router API Key (Optional)</span>
+                      {currentConfig?.savedKeys?.['9router'] && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded font-semibold">
+                          ✓ Saved ({currentConfig.provider === '9router' ? currentConfig.maskedKey : 'Active'})
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fetchModelsFrom9Router(ninerouterKey, ninerouterBaseUrl, true)}
+                      disabled={isLoadingModels}
+                      className="text-[11px] text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
+                      <span>{isLoadingModels ? 'Fetching Models...' : 'Fetch Models'}</span>
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={ninerouterKey}
+                      onChange={(e) => handle9RouterKeyChange(e.target.value)}
+                      onPaste={handle9RouterKeyPaste}
+                      placeholder={currentConfig?.savedKeys?.['9router'] ? "Key saved (paste/type to auto-fetch models)" : "Paste 9Router API Key to auto-load models"}
+                      className="w-full pl-9 pr-4 py-2.5 text-xs bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-amber-500 focus:outline-none dark:text-white font-mono"
+                    />
+                    <Key className="w-4 h-4 text-amber-500 absolute left-3 top-3" />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Paste your API key to automatically retrieve all models from 9Router.</span>
+                    {dynamicModels['9router']?.length > 0 && (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">
+                        ✓ {dynamicModels['9router'].length} models retrieved
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -548,6 +808,7 @@ export default function AiSettingsModal({ isOpen, onClose, onConfigSaved }) {
                   provider === 'openrouter' ? 'OpenRouter Engine' :
                   provider === 'openai' ? 'OpenAI Model' :
                   provider === 'gemini' ? 'Gemini Engine' :
+                  provider === '9router' ? '9Router Gateway' :
                   'Antigravity Agent'
                 }
               </span>

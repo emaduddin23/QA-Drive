@@ -279,11 +279,17 @@ ${knowledgeText}
 `;
 
     const cleanJsonResponse = (text) => {
+      if (!text) throw new Error("Empty response from AI model");
       let cleaned = text.trim();
       if (cleaned.startsWith('```json')) {
         cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       } else if (cleaned.startsWith('```')) {
         cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
       }
       return JSON.parse(cleaned);
     };
@@ -411,6 +417,45 @@ ${knowledgeText}
       const data = await res.json();
       if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
       const text = data?.choices?.[0]?.message?.content;
+      return cleanJsonResponse(text);
+    } else if (provider === '9router' || provider === 'ninerouter') {
+      const baseUrl = (process.env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1').replace(/\/+$/, '');
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (apiKey && apiKey.trim()) {
+        headers['Authorization'] = `Bearer ${apiKey.trim()}`;
+      }
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: modelName || 'kgw/kilo-auto/free',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+        })
+      });
+
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        // Handle router/proxy responses with trailing SSE tags like 'data: [DONE]'
+        const cleaned = rawText.replace(/data:\s*\[DONE\].*$/s, '').trim();
+        const first = cleaned.indexOf('{');
+        const last = cleaned.lastIndexOf('}');
+        if (first !== -1 && last !== -1) {
+          data = JSON.parse(cleaned.substring(first, last + 1));
+        } else {
+          throw new Error(`9Router returned non-JSON response: ${rawText.slice(0, 200)}`);
+        }
+      }
+
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+      const text = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.message?.reasoning;
       return cleanJsonResponse(text);
     } else {
       // Default: Google Gemini REST API

@@ -1,9 +1,12 @@
 {
-  "provider": "deepseek",
-  "model": "deepseek-chat",
+  "provider": "9router",
+  "model": "kgw/kilo-auto/free",
   "antigravityKey": "",
   "opencodeKey": "",
+  "deepseekKey": "",
   "geminiKey": "",
   "openaiKey": "",
-  "openrouterKey": ""
+  "openrouterKey": "",
+  "ninerouterKey": "",
+  "ninerouterBaseUrl": "http://localhost:20128/v1"
 }

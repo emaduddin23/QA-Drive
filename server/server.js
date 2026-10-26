@@ -160,7 +160,9 @@ function loadAiConfig() {
     deepseekKey: process.env.DEEPSEEK_API_KEY || '',
     geminiKey: process.env.GEMINI_API_KEY || '',
     openaiKey: process.env.OPENAI_API_KEY || '',
-    openrouterKey: process.env.OPENROUTER_API_KEY || ''
+    openrouterKey: process.env.OPENROUTER_API_KEY || '',
+    ninerouterKey: process.env.NINEROUTER_API_KEY || process.env['9ROUTER_API_KEY'] || '',
+    ninerouterBaseUrl: process.env.NINEROUTER_BASE_URL || process.env['9ROUTER_BASE_URL'] || 'http://localhost:20128/v1'
   };
 
   if (fs.existsSync(AI_CONFIG_FILE)) {
@@ -170,6 +172,9 @@ function loadAiConfig() {
     } catch (e) {
       console.error("Error loading ai-config.json:", e);
     }
+  }
+  if (config.ninerouterBaseUrl) {
+    process.env.NINEROUTER_BASE_URL = config.ninerouterBaseUrl;
   }
   return config;
 }
@@ -184,43 +189,50 @@ function saveAiConfig(config) {
 
 let activeAiConfig = loadAiConfig();
 
+function getActiveAiKey() {
+  if (activeAiConfig.provider === 'antigravity') {
+    return activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY || '';
+  } else if (activeAiConfig.provider === 'opencode') {
+    return activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY || '';
+  } else if (activeAiConfig.provider === 'deepseek') {
+    return activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY || '';
+  } else if (activeAiConfig.provider === 'openrouter') {
+    return activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY || '';
+  } else if (activeAiConfig.provider === 'openai') {
+    return activeAiConfig.openaiKey || process.env.OPENAI_API_KEY || '';
+  } else if (activeAiConfig.provider === '9router' || activeAiConfig.provider === 'ninerouter') {
+    return activeAiConfig.ninerouterKey || process.env.NINEROUTER_API_KEY || process.env['9ROUTER_API_KEY'] || '';
+  } else {
+    return activeAiConfig.geminiKey || process.env.GEMINI_API_KEY || '';
+  }
+}
+
 // GET AI Configuration & Status
 app.get('/api/ai/config', (req, res) => {
-  let activeKey = '';
-
-  if (activeAiConfig.provider === 'antigravity') {
-    activeKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY || '';
-  } else if (activeAiConfig.provider === 'opencode') {
-    activeKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY || '';
-  } else if (activeAiConfig.provider === 'deepseek') {
-    activeKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY || '';
-  } else if (activeAiConfig.provider === 'openrouter') {
-    activeKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY || '';
-  } else if (activeAiConfig.provider === 'openai') {
-    activeKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY || '';
-  } else {
-    activeKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY || '';
-  }
+  const activeKey = getActiveAiKey();
+  const isNineRouter = activeAiConfig.provider === '9router' || activeAiConfig.provider === 'ninerouter';
 
   res.json({
     provider: activeAiConfig.provider,
     model: activeAiConfig.model,
-    hasKey: Boolean(activeKey),
-    maskedKey: activeKey ? `${activeKey.substring(0, 7)}...${activeKey.slice(-4)}` : '',
+    hasKey: Boolean(activeKey) || isNineRouter,
+    maskedKey: activeKey ? `${activeKey.substring(0, 7)}...${activeKey.slice(-4)}` : (isNineRouter ? '9Router Gateway' : ''),
+    ninerouterBaseUrl: activeAiConfig.ninerouterBaseUrl || process.env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1',
     savedKeys: {
       antigravity: Boolean(activeAiConfig.antigravityKey),
       opencode: Boolean(activeAiConfig.opencodeKey),
       deepseek: Boolean(activeAiConfig.deepseekKey),
       gemini: Boolean(activeAiConfig.geminiKey),
       openai: Boolean(activeAiConfig.openaiKey),
-      openrouter: Boolean(activeAiConfig.openrouterKey)
+      openrouter: Boolean(activeAiConfig.openrouterKey),
+      '9router': Boolean(activeAiConfig.ninerouterKey)
     }
   });
 });
 
 // POST Save AI Provider, API Keys & Model
 app.post('/api/ai/config', (req, res) => {
-  const { provider, model, apiKey, antigravityKey, opencodeKey, deepseekKey, geminiKey, openaiKey, openrouterKey } = req.body;
+  const { provider, model, apiKey, antigravityKey, opencodeKey, deepseekKey, geminiKey, openaiKey, openrouterKey, ninerouterKey, ninerouterBaseUrl } = req.body;
 
   if (provider) activeAiConfig.provider = provider;
   if (model) activeAiConfig.model = model;
@@ -249,6 +261,14 @@ app.post('/api/ai/config', (req, res) => {
     activeAiConfig.openrouterKey = openrouterKey.trim();
     process.env.OPENROUTER_API_KEY = openrouterKey.trim();
   }
+  if (ninerouterKey !== undefined) {
+    activeAiConfig.ninerouterKey = ninerouterKey.trim();
+    process.env.NINEROUTER_API_KEY = ninerouterKey.trim();
+  }
+  if (ninerouterBaseUrl !== undefined && ninerouterBaseUrl.trim() !== '') {
+    activeAiConfig.ninerouterBaseUrl = ninerouterBaseUrl.trim();
+    process.env.NINEROUTER_BASE_URL = ninerouterBaseUrl.trim();
+  }
 
   // Backwards compatibility for single apiKey field
   if (apiKey && apiKey.trim() !== '') {
@@ -268,6 +288,9 @@ app.post('/api/ai/config', (req, res) => {
     } else if (activeAiConfig.provider === 'openai') {
       activeAiConfig.openaiKey = keyTrimmed;
       process.env.OPENAI_API_KEY = keyTrimmed;
+    } else if (activeAiConfig.provider === '9router' || activeAiConfig.provider === 'ninerouter') {
+      activeAiConfig.ninerouterKey = keyTrimmed;
+      process.env.NINEROUTER_API_KEY = keyTrimmed;
     } else {
       activeAiConfig.geminiKey = keyTrimmed;
       process.env.GEMINI_API_KEY = keyTrimmed;
@@ -277,13 +300,8 @@ app.post('/api/ai/config', (req, res) => {
   // Save to file for persistence across server restarts
   saveAiConfig(activeAiConfig);
 
-  let activeKey = '';
-  if (activeAiConfig.provider === 'antigravity') activeKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
-  else if (activeAiConfig.provider === 'opencode') activeKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
-  else if (activeAiConfig.provider === 'deepseek') activeKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
-  else if (activeAiConfig.provider === 'openrouter') activeKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
-  else if (activeAiConfig.provider === 'openai') activeKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
-  else activeKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
+  const activeKey = getActiveAiKey();
+  const isNineRouter = activeAiConfig.provider === '9router' || activeAiConfig.provider === 'ninerouter';
 
   res.json({
     success: true,
@@ -291,8 +309,8 @@ app.post('/api/ai/config', (req, res) => {
     config: {
       provider: activeAiConfig.provider,
       model: activeAiConfig.model,
-      hasKey: Boolean(activeKey),
-      maskedKey: activeKey ? `${activeKey.substring(0, 7)}...${activeKey.slice(-4)}` : ''
+      hasKey: Boolean(activeKey) || isNineRouter,
+      maskedKey: activeKey ? `${activeKey.substring(0, 7)}...${activeKey.slice(-4)}` : (isNineRouter ? '9Router Gateway' : '')
     }
   });
 });
@@ -305,13 +323,7 @@ app.post('/api/test/plan', async (req, res) => {
   }
 
   const targetUrl = reqTargetUrl || '';
-  let currentKey = '';
-  if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
-  else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
-  else if (activeAiConfig.provider === 'deepseek') currentKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
-  else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
-  else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
-  else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
+  const currentKey = getActiveAiKey();
 
   const plan = await agentBrain.planAndExecute(prompt, targetUrl, currentKey, activeAiConfig.provider, activeAiConfig.model);
   res.json(plan);
@@ -339,13 +351,7 @@ app.post('/api/test/execute', async (req, res) => {
 app.post('/api/test/autonomous/start', async (req, res) => {
   try {
     const { url, username, password, useKnowledgeDrive, goalPrompt } = req.body;
-    let currentKey = '';
-    if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
-    else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
-    else if (activeAiConfig.provider === 'deepseek') currentKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
-    else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
-    else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
-    else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
+    const currentKey = getActiveAiKey();
 
     res.json({ success: true, message: 'Autonomous session started' });
 
@@ -371,9 +377,41 @@ app.post('/api/test/autonomous/start', async (req, res) => {
 });
 // Validate API Key Endpoint
 app.post('/api/ai/validate-key', async (req, res) => {
-  const { provider, key } = req.body;
-  if (!provider || !key) {
-    return res.status(400).json({ valid: false, error: 'Provider and key are required.' });
+  const { provider, key, baseUrl: reqBaseUrl } = req.body;
+  if (!provider) {
+    return res.status(400).json({ valid: false, error: 'Provider is required.' });
+  }
+
+  // For 9Router, verify connectivity with local/remote 9Router Gateway
+  if (provider === '9router' || provider === 'ninerouter') {
+    try {
+      const baseUrl = (reqBaseUrl || activeAiConfig.ninerouterBaseUrl || process.env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1').replace(/\/+$/, '');
+      const headers = {};
+      if (key && key.trim()) {
+        headers['Authorization'] = `Bearer ${key.trim()}`;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const testRes = await fetch(`${baseUrl}/models`, {
+        method: 'GET',
+        headers,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!testRes.ok && testRes.status !== 404 && testRes.status !== 401) {
+        return res.json({ valid: false, error: `9Router gateway returned HTTP ${testRes.status}` });
+      }
+      return res.json({ valid: true });
+    } catch (e) {
+      return res.json({
+        valid: false,
+        error: `Could not connect to 9Router at gateway URL (${e.message}). Make sure 9Router is running (e.g. npx 9router).`
+      });
+    }
+  }
+
+  if (!key) {
+    return res.status(400).json({ valid: false, error: 'Key is required.' });
   }
   // Basic validation: ensure key is non‑empty and of reasonable length
   if (key.trim().length < 8) {
@@ -416,7 +454,99 @@ app.post('/api/ai/validate-key', async (req, res) => {
       return res.json({ valid: false, error: `OpenCode validation error: ${e.message}` });
     }
   }
+
+  // For OpenRouter, perform a lightweight test request to validate the key
+  if (provider === 'openrouter') {
+    try {
+      const testRes = await fetch('https://openrouter.ai/api/v1/auth/key', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key.trim()}`,
+        }
+      });
+      if (!testRes.ok) {
+        const errData = await testRes.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `Invalid key (HTTP ${testRes.status})`;
+        return res.json({ valid: false, error: `OpenRouter validation failed: ${errMsg}` });
+      }
+    } catch (e) {
+      return res.json({ valid: false, error: `OpenRouter validation error: ${e.message}` });
+    }
+  }
   return res.json({ valid: true });
+});
+
+// Fetch Models dynamically from Provider (e.g. 9Router)
+app.post('/api/ai/models', async (req, res) => {
+  const { provider, key, baseUrl: reqBaseUrl } = req.body;
+  const targetProvider = provider || activeAiConfig.provider;
+
+  if (targetProvider === '9router' || targetProvider === 'ninerouter') {
+    try {
+      const baseUrl = (reqBaseUrl || activeAiConfig.ninerouterBaseUrl || process.env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1').replace(/\/+$/, '');
+      const headers = { 'Content-Type': 'application/json' };
+      const apiKey = (key !== undefined && key.trim() !== '')
+        ? key.trim()
+        : (activeAiConfig.ninerouterKey || process.env.NINEROUTER_API_KEY || '');
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const testRes = await fetch(`${baseUrl}/models`, {
+        method: 'GET',
+        headers,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!testRes.ok) {
+        const errText = await testRes.text().catch(() => '');
+        return res.status(testRes.status).json({
+          success: false,
+          error: `9Router returned HTTP ${testRes.status}: ${errText}`
+        });
+      }
+
+      const data = await testRes.json();
+      let rawList = [];
+      if (Array.isArray(data.data)) rawList = data.data;
+      else if (Array.isArray(data.models)) rawList = data.models;
+      else if (Array.isArray(data)) rawList = data;
+      else if (data && typeof data === 'object') {
+        const found = Object.values(data).find(v => Array.isArray(v));
+        if (found) rawList = found;
+      }
+
+      const models = rawList.map(item => {
+        const id = typeof item === 'string' ? item : (item.id || item.name || item.model);
+        const isFree = /(:free|-free|\bfree\b)/i.test(id) || /(:free|-free|\bfree\b)/i.test(typeof item === 'object' ? (item.name || '') : '');
+        const baseName = (typeof item === 'object' && item.name && item.name !== id)
+          ? `${item.name} (${id})`
+          : id;
+        const name = isFree ? `🟢 [FREE] ${baseName}` : baseName;
+        return { id, name, isFree };
+      }).filter(m => Boolean(m.id));
+
+      // Place all FREE models at the very top of the list!
+      models.sort((a, b) => {
+        if (a.isFree && !b.isFree) return -1;
+        if (!a.isFree && b.isFree) return 1;
+        return a.id.localeCompare(b.id);
+      });
+
+      return res.json({ success: true, count: models.length, models });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: `Could not fetch models from 9Router: ${err.message}`
+      });
+    }
+  }
+
+  return res.json({ success: true, models: [] });
 });
 app.post('/api/test/autonomous/stop', async (req, res) => {
   try {
@@ -443,13 +573,7 @@ app.post('/api/test/interactive/start', async (req, res) => {
 app.post('/api/test/interactive/execute', async (req, res) => {
   try {
     const { prompt } = req.body;
-    let currentKey = '';
-    if (activeAiConfig.provider === 'antigravity') currentKey = activeAiConfig.antigravityKey || process.env.ANTIGRAVITY_API_KEY || process.env.GEMINI_API_KEY;
-    else if (activeAiConfig.provider === 'opencode') currentKey = activeAiConfig.opencodeKey || process.env.OPENCODE_API_KEY;
-    else if (activeAiConfig.provider === 'deepseek') currentKey = activeAiConfig.deepseekKey || process.env.DEEPSEEK_API_KEY;
-    else if (activeAiConfig.provider === 'openrouter') currentKey = activeAiConfig.openrouterKey || process.env.OPENROUTER_API_KEY;
-    else if (activeAiConfig.provider === 'openai') currentKey = activeAiConfig.openaiKey || process.env.OPENAI_API_KEY;
-    else currentKey = activeAiConfig.geminiKey || process.env.GEMINI_API_KEY;
+    const currentKey = getActiveAiKey();
 
     broadcast({ type: 'STATUS', message: 'Translating command to actions...' });
     const actions = await agentBrain.translateInteractiveCommand(prompt, currentKey, activeAiConfig.provider, activeAiConfig.model);
