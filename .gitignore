@@ -8,6 +8,7 @@ dist/
 credentials.json
 token.json
 *secret*.json
+ai-config.json
 
 # Images
 *.png
