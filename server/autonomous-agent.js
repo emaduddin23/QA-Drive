@@ -86,69 +86,92 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
     });
 
     let loggedIn = false;
-    const loginPageUrl = page.url(); // Save the login page URL before login
+    const loginPageUrl = page.url(); // Save the initial URL
 
-    // Initial Login Step (if credentials provided)
-    if (username && password) {
-      onStepProgress({ type: 'STATUS', message: `Attempting auto-login with provided credentials...` });
-      const loginPrompt = `Look at the page state below and find the email/username input field and password input field. Fill them and click the login/submit button.
-Username/Email: ${username}
-Password: ${password}
+    // 1. Intelligent SSO & Multi-Step Authentication
+    let resolvedUser = username;
+    let resolvedPass = password;
+    if (!resolvedUser || !resolvedPass) {
+      const emailMatch = (goalPrompt || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+      const passMatch = (goalPrompt || '').match(/(?:pass|password)\s*[:=]?\s*([^\s]+)/i);
+      if (emailMatch && !resolvedUser) resolvedUser = emailMatch[1];
+      if (passMatch && !resolvedPass) resolvedPass = passMatch[1];
+    }
 
-IMPORTANT: Use the EXACT selectors from the page state. Do not guess.`;
-      
+    const hasLoginIntent = (resolvedUser && resolvedPass) || /sign\s*in|sign\s*with|login|log\s*in|authenticate|dashboard/i.test(goalPrompt || '');
+    if (hasLoginIntent) {
+      onStepProgress({ type: 'STATUS', message: `Detecting sign-in flow (SSO / Uapp / Form credentials)...` });
       const loginPageState = await getPageState(page);
-      onStepProgress({ type: 'STATUS', message: `Login page state: ${loginPageState.substring(0, 300)}...` });
-      
+      const loginPrompt = `You are an AI Browser Automation Engineer.
+Your goal is to authenticate the user and reach the Dashboard.
+Examine the Live Page State (DOM elements):
+${loginPageState}
+
+User Instruction / Goal: "${goalPrompt || 'Sign in and check dashboard'}"
+${resolvedUser ? `Username/Email: ${resolvedUser}` : 'Username/Email: user@example.com'}
+${resolvedPass ? `Password: ${resolvedPass}` : 'Password: Password123!'}
+
+CRITICAL RULES:
+1. If there is a Single Sign-On / App Login button (such as "Sign in with Uapp", "Sign with Uapp", "Login with App", "Sign in with Google", "Log In", or "Sign In") that must be clicked first before the inputs appear, YOUR FIRST ACTION MUST BE TO CLICK THAT BUTTON!
+2. If email/username and password fields are present, fill them and click the Submit/Login button.
+3. Use exact selectors from the Live Page State.
+
+Output ONLY a JSON array of actions:
+[
+  { "type": "click", "selector": "button:has-text('Sign with Uapp'), button:has-text('Sign in')" },
+  { "type": "wait", "timeout": 2000 },
+  { "type": "fill", "selector": "input[type='email'], #email", "value": "${resolvedUser || 'user@example.com'}" },
+  { "type": "fill", "selector": "input[type='password'], #password", "value": "${resolvedPass || 'Password123!'}" },
+  { "type": "click", "selector": "button[type='submit'], .login-btn" }
+]`;
+
       const loginActions = await agentBrain.translateInteractiveCommand(loginPrompt, apiKey, provider, modelName, loginPageState);
-      if (Array.isArray(loginActions)) {
-        onStepProgress({ type: 'STATUS', message: `Login actions: ${JSON.stringify(loginActions)}` });
+      if (Array.isArray(loginActions) && loginActions.length > 0) {
+        onStepProgress({ type: 'STATUS', message: `Executing authentication actions: ${loginActions.length} steps...` });
         for (const action of loginActions) {
           try {
-            if (action.type === 'fill') {
-              await page.fill(action.selector, action.value, { timeout: 5000 });
-              onStepProgress({ type: 'STATUS', message: `✓ Filled ${action.selector}` });
-            }
-            else if (action.type === 'click') {
-              await page.click(action.selector, { timeout: 5000 });
+            if (action.type === 'click') {
+              await page.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
+              await page.click(action.selector);
               onStepProgress({ type: 'STATUS', message: `✓ Clicked ${action.selector}` });
+              await page.waitForTimeout(1000);
+            } else if (action.type === 'fill') {
+              await page.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
+              await page.fill(action.selector, String(action.value));
+              onStepProgress({ type: 'STATUS', message: `✓ Filled ${action.selector}` });
+            } else if (action.type === 'wait') {
+              await page.waitForTimeout(action.timeout || 1500);
+            } else if (action.type === 'press') {
+              await page.keyboard.press(action.key || 'Enter');
             }
-            else if (action.type === 'wait') await page.waitForTimeout(action.timeout || 1000);
-            else if (action.type === 'press') await page.keyboard.press(action.key || 'Enter');
           } catch (e) {
-            onStepProgress({ type: 'STATUS', message: `✗ Login action failed: ${action.type} ${action.selector} — ${e.message}` });
+            onStepProgress({ type: 'STATUS', message: `Login action notice: ${e.message}` });
           }
         }
 
-        // Wait for navigation/redirect after login
-        onStepProgress({ type: 'STATUS', message: `Waiting for login redirect...` });
-        try {
-          await page.waitForURL((url) => url.toString() !== loginPageUrl, { timeout: 10000 });
+        // Wait for page redirect to dashboard
+        onStepProgress({ type: 'STATUS', message: 'Waiting for dashboard redirection...' });
+        await page.waitForLoadState('networkidle').catch(() => {});
+        await page.waitForTimeout(3000);
+
+        if (page.url() !== loginPageUrl || /dashboard|home|feed|app/i.test(page.url())) {
           loggedIn = true;
-          onStepProgress({ type: 'STATUS', message: `✓ Login successful! Redirected to: ${page.url()}` });
-        } catch (e) {
-          // URL didn't change — try pressing Enter as fallback
-          onStepProgress({ type: 'STATUS', message: `URL did not change. Trying Enter key as fallback...` });
+          onStepProgress({ type: 'STATUS', message: `✓ Successfully authenticated! Now on: ${page.url()}` });
+        } else {
           await page.keyboard.press('Enter');
-          await page.waitForTimeout(5000);
+          await page.waitForTimeout(3000);
           if (page.url() !== loginPageUrl) {
             loggedIn = true;
-            onStepProgress({ type: 'STATUS', message: `✓ Login successful after Enter! Now at: ${page.url()}` });
-          } else {
-            onStepProgress({ type: 'STATUS', message: `✗ Login may have failed. Still at: ${page.url()}. Proceeding anyway...` });
-            loggedIn = true; // Mark as logged in anyway to prevent re-testing login
+            onStepProgress({ type: 'STATUS', message: `✓ Authenticated after submission! Now on: ${page.url()}` });
           }
         }
-      } else {
-        onStepProgress({ type: 'STATUS', message: `Failed to parse login actions. Proceeding without login.` });
       }
-
-      pastActions.push('LOGIN COMPLETED - Authentication done. Do NOT revisit login page or test login forms.');
+      pastActions.push('AUTHENTICATION STEP COMPLETE - Now on target authenticated page.');
     }
 
     // Record the post-login URL as the "base" for testing
     const postLoginUrl = page.url();
-    onStepProgress({ type: 'STATUS', message: `Starting testing from: ${postLoginUrl}` });
+    onStepProgress({ type: 'STATUS', message: `Starting exploration from: ${postLoginUrl}` });
 
     // Main Autonomous Loop
     let stepNum = 1;
@@ -270,10 +293,10 @@ IMPORTANT: Use the EXACT selectors from the page state. Do not guess.`;
           }
         }
 
-        // Check if we accidentally landed on login page after actions
-        if (loggedIn && page.url().toLowerCase().includes('login')) {
-          onStepProgress({ type: 'STATUS', message: `⚠️ Detected redirect to login page. Navigating back to: ${postLoginUrl}` });
-          await page.goto(postLoginUrl, { waitUntil: 'networkidle' });
+        // If an action accidentally redirected back to initial landing page
+        if (loggedIn && page.url() === loginPageUrl && postLoginUrl !== loginPageUrl) {
+          onStepProgress({ type: 'STATUS', message: `Navigating forward to authenticated page: ${postLoginUrl}` });
+          await page.goto(postLoginUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
         }
         
         // Let UI settle before screenshot

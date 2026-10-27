@@ -301,7 +301,14 @@ Based on the user requirement and the retrieved QA Knowledge Base documents belo
 CRITICAL: Return ONLY raw JSON without markdown code blocks.
 
 1. Extract the 'targetUrl' from the user's prompt (e.g. if user says "goto https://your-site.com", use "https://your-site.com"). If no URL is specified in prompt, use the configured targetUrl.
-2. For each test case, generate an array of dynamic 'actions' (e.g., 'goto', 'fill', 'click', 'wait', 'press'). Guess standard selectors for login forms or checkout based on the context.
+2. For each test case, generate an array of dynamic 'actions' (e.g., 'goto', 'fill', 'click', 'wait', 'press'). Guess standard selectors for login forms, buttons, or checkout based on the context.
+
+CRITICAL WORKFLOW & AUTHENTICATION RULES:
+- Multi-step / SSO Authentication: If the user instructions mention signing in with an app or button (e.g. "click the sign with Uapp", "Sign in with Google", SSO, "Login with App"):
+  YOU MUST include the click action on that SSO/App button (e.g. 'button:has-text("Sign with Uapp"), button:has-text("Uapp"), a:has-text("Uapp"), [aria-label*="Uapp" i], button:has-text("Sign in")') BEFORE attempting to fill email and password!
+- Post-Login Redirection: After submitting the login form, ALWAYS include a wait action (e.g. { "type": "wait", "timeout": 3000 }) to allow redirect to the Dashboard!
+- Session Continuity: In subsequent test cases (such as "Check Dashboard whole functionality"):
+  DO NOT navigate back to the login page! The user is already logged in and on the Dashboard! Generate actions that interact with dashboard navigation links ('nav a', 'header a', '.menu-item'), metrics cards, data tables, and settings!
 
 JSON Output Schema:
 {
@@ -316,7 +323,10 @@ JSON Output Schema:
       "shouldPass": true,
       "actions": [
         { "type": "goto", "url": "https://extracted-url.com" },
+        { "type": "click", "selector": "button:has-text('Sign with Uapp'), button:has-text('Uapp'), button:has-text('Sign in')" },
+        { "type": "wait", "timeout": 1500 },
         { "type": "fill", "selector": "input[type='email'], #email", "value": "test@test.com" },
+        { "type": "fill", "selector": "input[type='password'], #password", "value": "Password123!" },
         { "type": "click", "selector": "button[type='submit'], .submit-btn" },
         { "type": "wait", "timeout": 3000 }
       ]

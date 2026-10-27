@@ -66,6 +66,15 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress, ap
 
             const executeSingleAction = async (act) => {
               if (act.type === 'goto') {
+                const current = page.url();
+                if (i > 0 && current && (current.includes('dashboard') || current.includes('/app') || current.includes('/home')) &&
+                    (act.url === formattedUrl || act.url.includes('login') || act.url.includes('signin'))) {
+                  onStepProgress({
+                    type: 'STATUS',
+                    message: `Preserving authenticated dashboard session (staying on ${current}).`
+                  });
+                  return;
+                }
                 await page.goto(act.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
               } else if (act.type === 'fill') {
                 await page.waitForSelector(act.selector, { state: 'visible', timeout: 4000 });
@@ -73,6 +82,11 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress, ap
               } else if (act.type === 'click') {
                 await page.waitForSelector(act.selector, { state: 'visible', timeout: 4000 });
                 await page.click(act.selector);
+                // If clicking login or submit button, allow time for dashboard navigation
+                if (/login|sign[- ]?in|submit|auth/i.test(act.selector || '')) {
+                  await page.waitForTimeout(1500);
+                  await page.waitForLoadState('networkidle').catch(() => {});
+                }
               } else if (act.type === 'wait') {
                 await page.waitForTimeout(act.timeout || 1000);
               } else if (act.type === 'press') {
