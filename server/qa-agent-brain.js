@@ -185,20 +185,12 @@ ${knowledgeDocs.map(d => `--- Document: ${d.filename} (${d.category}) ---\n${d.c
 =======================================================\n`
       : '';
 
-    const systemPrompt = `You are an Autonomous QA Exploratory Agent.
-Your goal is to test the application by interacting with it, discovering bugs, and generating test cases for what you test.
-The user provided a target URL: ${targetUrl}.
-${goalPrompt ? `\nCRITICAL USER GOAL/INSTRUCTION:\nThe user has provided a specific instruction for you to focus on: "${goalPrompt}". You MUST prioritize testing this flow or feature.\n` : ''}
-${loggedIn ? `\n⚠️ EXTREMELY IMPORTANT - LOGIN IS ALREADY COMPLETE ⚠️
-You have ALREADY logged in successfully. The login step was handled automatically BEFORE your testing loop started.
-You MUST NOT:
-- Navigate to the login page
-- Try to fill login forms
-- Test login functionality
-- Click logout buttons
-- Do anything related to authentication/login/signin
-Instead, you MUST focus ONLY on testing the INTERNAL pages (dashboard, settings, forms, data, navigation, etc.) that are available AFTER login.
-If the current page appears to be a login page, navigate away from it immediately to the dashboard or main content area.\n` : ''}
+    const systemPrompt = `You are an Autonomous QA Agent executing a directed user test mission.
+${goalPrompt ? `\n🎯 USER'S PRIMARY MISSION & INSTRUCTIONS (ABSOLUTE HIGHEST PRIORITY):
+"${goalPrompt}"
+You MUST strictly follow and fulfill this instruction. Every single action you choose MUST directly advance and execute what the user requested in their instruction. Do NOT click random unrelated elements when there are elements matching the user's instructions!\n` : '\nExplore the application systematically, discovering bugs, verifying interactive elements, and testing boundaries.\n'}
+The target URL is: ${targetUrl}.
+${loggedIn ? `\n⚠️ LOGIN IS COMPLETE: The user is authenticated. You MUST NOT interact with login forms or click logout. Focus exclusively on the internal pages, tabs, features, and workflows specified in the user's instructions.\n` : ''}
 ${knowledgeSection}
 Current Page State (simplified DOM elements you can interact with):
 ${pageState}
@@ -207,18 +199,16 @@ Past Actions you have taken:
 ${JSON.stringify(pastActions, null, 2)}
 
 Instructions:
-1. First, study the QA Knowledge Base documents (PDF guidelines) above. Apply testing techniques like Boundary Value Analysis, Equivalence Partitioning, negative validation tests, or exploratory paths as specified in your documents.
-2. Review the Current Page State and Past Actions.
-3. Decide on ONE logical next step to test the application.
-4. THOROUGH MULTI-FEATURE EXPLORATION:
-   - When testing a dashboard or portal (e.g. "News Feed", "Chats", "Bookings", "My Schedule", "Settings", search bar, posting forms, notifications), test each distinct feature and navigation item step by step.
-   - Do NOT set "isDone": true prematurely after only 1 or 2 steps! You MUST perform at least 6 to 12 distinct test steps covering the application's functionality.
-5. Only set "isDone": true when:
-   - You have thoroughly explored all key navigation sections and interactive features (stepNum >= 8), OR
-   - The page encountered a fatal connection timeout or error (e.g. ERR_TIMED_OUT).
-6. Formulate the Playwright actions for this step.
-7. Provide a Test Case description for the action you chose, referencing the exact PDF document name that guided this test.
-${loggedIn ? '8. REMINDER: Do NOT test login. Focus on post-login content ONLY.' : ''}
+1. USER INSTRUCTION ADHERENCE (MANDATORY):
+   - Read the user's instruction: "${goalPrompt || 'General application testing'}".
+   - Compare with Past Actions to see which part of the user's request has been fulfilled and what remains to be tested.
+   - Find the matching element(s) in the Current Page State and take the exact next action that directly progresses the user's instruction (e.g. if the user mentioned News Feed, Chats, Bookings, Schedule, Settings, forms, search, or filters, click into and test those specific features in order).
+2. Apply QA testing techniques from the Knowledge Base (boundary checks, negative validation, input limits) to the specific feature being tested.
+3. Formulate the Playwright actions for this step using exact selectors from the Current Page State.
+4. Provide a clear Test Case title and expected result explaining how this step fulfills the user's instruction.
+5. Setting "isDone":
+   - Do NOT set "isDone": true until ALL features and steps requested in the user's instruction have been tested (aim for at least 6 to 12 thorough steps).
+   - Only set "isDone": true when the user's entire mission has been accomplished, or if a fatal connection error (e.g. ERR_TIMED_OUT) prevents further testing.
 
 CRITICAL: Return ONLY raw JSON without markdown code blocks.
 
@@ -226,13 +216,13 @@ Output Schema:
 {
   "isDone": boolean,
   "testCase": {
-    "title": "Short title of what is being tested (e.g., 'Submit Quantity Boundary Test')",
-    "expectedResult": "What you expect to happen based on QA doc rules",
-    "technique": "Boundary Value Analysis / Equivalence Partitioning / Exploratory"
+    "title": "Short title describing what is being tested per user instruction",
+    "expectedResult": "What you expect to happen based on user requirements and QA rules",
+    "technique": "Functional / Boundary Value Analysis / Equivalence Partitioning / Workflow"
   },
-  "referencedDocs": ["Filename1.pdf", "Filename2.pdf"], // Array of document filenames from the knowledge base that guided this decision.
+  "referencedDocs": ["Filename1.pdf", "Filename2.pdf"],
   "actions": [
-    { "type": "click", "selector": "#submit-btn" }
+    { "type": "click", "selector": "#target-btn" }
   ]
 }`;
 
@@ -308,6 +298,7 @@ CRITICAL: Return ONLY raw JSON without markdown code blocks.
 2. For each test case, generate an array of dynamic 'actions' (e.g., 'goto', 'fill', 'click', 'wait', 'press'). Guess standard selectors for login forms, buttons, or checkout based on the context.
 
 CRITICAL WORKFLOW & MULTI-STEP RULES:
+- Strict Instruction Faithfulness (HIGHEST PRIORITY): The test cases generated MUST directly execute what the user instructed in their prompt. If the user mentions specific features, flows, or pages (e.g. "click sign with Uapp", "user provide email and password", "Check the Dashboard whole functionality", "test bookings", "verify settings"), create dedicated, focused test cases covering every single part of their instructions in the exact sequence requested.
 - Universal Sequential Mapping: The user can give instructions in ANY format or phrasing (English, Banglish, Bengali, shorthand, or detailed steps). You MUST break down their natural language intent into a clean chronological sequence of Playwright actions (e.g., "click X, then fill Y, then submit, then verify Z" or "search for item, add to cart, proceed to checkout").
 - Dynamic Intermediate Steps & Modals: If the flow requires an intermediate click (e.g. SSO buttons like "Sign with Uapp", "Sign in with Google", "Login with Okta", "Continue with Email", opening a popup/modal, tab navigation, or accepting cookies/terms) BEFORE inputs become visible, YOU MUST emit the click action for that element FIRST and include a short wait (e.g., 1000-2000ms) before attempting to fill form inputs.
 - Post-Submission & Redirection: After submitting a form or triggering an asynchronous action, ALWAYS include a wait action (e.g. { "type": "wait", "timeout": 3000 }) to allow the page or dashboard to complete loading.
