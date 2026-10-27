@@ -361,9 +361,9 @@ app.post('/api/test/autonomous/start', async (req, res) => {
 
     res.json({ success: true, message: 'Autonomous session started' });
 
-    // Retrieve relevant knowledge for autonomous exploration if enabled
+    // Retrieve relevant knowledge for autonomous exploration
     let retrievedDocs = [];
-    if (useKnowledgeDrive) {
+    if (useKnowledgeDrive !== false) {
       const searchResults = knowledgeBase.search(goalPrompt || 'testing QA test cases techniques SDLC STLC workflow', null);
       retrievedDocs = searchResults.slice(0, 8).map(res => res.doc);
       if (retrievedDocs.length === 0 && knowledgeBase.documents.length > 0) {

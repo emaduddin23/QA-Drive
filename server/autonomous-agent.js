@@ -185,6 +185,12 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
   }
 
   onStepProgress({ type: 'STATUS', message: 'Starting Autonomous QA Explorer...' });
+  if (knowledgeDocs && knowledgeDocs.length > 0) {
+    onStepProgress({
+      type: 'STATUS',
+      message: `📚 Loaded ${knowledgeDocs.length} QA Knowledge docs from Google Drive (${knowledgeDocs.slice(0, 3).map(d => d.filename).join(', ')}...)`
+    });
+  }
   let browser;
   const executionResults = [];
   const pastActions = [];
