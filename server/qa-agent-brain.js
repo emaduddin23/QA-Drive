@@ -210,8 +210,9 @@ Instructions:
 1. First, study the QA Knowledge Base documents (PDF guidelines) above. Apply testing techniques like Boundary Value Analysis, Equivalence Partitioning, negative validation tests, or exploratory paths as specified in your documents.
 2. Review the Current Page State and Past Actions.
 3. Decide on ONE logical next step to test the application (e.g., click a specific link, fill a form with invalid data, submit a form).
-4. You MUST explore and test AT LEAST 5 different interactions before considering setting "isDone" to true. Do NOT set isDone to true if stepNum < 5. Explore links, try to break forms, submit invalid data, and test boundaries.
-5. If stepNum >= 5 and there is genuinely nothing left to test, you may set "isDone" to true.
+4. Explore interactive elements: click navigation links, test forms, trigger filters, and test boundaries.
+5. If the current page shows a connection timeout (e.g. ERR_TIMED_OUT), an error screen, or has no new interactive elements left to test, set "isDone": true immediately.
+6. When primary interactive flows have been covered (typically 4 to 8 steps), set "isDone": true to complete the test suite cleanly.
 6. Formulate the Playwright actions for this step.
 7. Provide a Test Case description for the action you chose, referencing the exact PDF document name that guided this test.
 ${loggedIn ? '8. REMINDER: Do NOT test login. Focus on post-login content ONLY.' : ''}

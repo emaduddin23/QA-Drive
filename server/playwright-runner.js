@@ -67,8 +67,8 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress, ap
             const executeSingleAction = async (act) => {
               if (act.type === 'goto') {
                 const current = page.url();
-                if (i > 0 && current && (current.includes('dashboard') || current.includes('/app') || current.includes('/home')) &&
-                    (act.url === formattedUrl || act.url.includes('login') || act.url.includes('signin'))) {
+                if (i > 0 && current && (/dashboard|home|portal|feed|app|overview|projects|admin|settings|profile/i.test(current)) &&
+                    (act.url === formattedUrl || /login|signin|sign-in|auth/i.test(act.url))) {
                   onStepProgress({
                     type: 'STATUS',
                     message: `Preserving authenticated dashboard session (staying on ${current}).`
@@ -82,9 +82,10 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress, ap
               } else if (act.type === 'click') {
                 await page.waitForSelector(act.selector, { state: 'visible', timeout: 4000 });
                 await page.click(act.selector);
-                // If clicking login or submit button, allow time for dashboard navigation
-                if (/login|sign[- ]?in|submit|auth/i.test(act.selector || '')) {
+                // If clicking login, submit, or SSO/provider button, allow time for navigation
+                if (/login|sign[- ]?in|submit|auth|uapp|sso|continue/i.test(act.selector || '')) {
                   await page.waitForTimeout(1500);
+                  await page.waitForLoadState('domcontentloaded').catch(() => {});
                   await page.waitForLoadState('networkidle').catch(() => {});
                 }
               } else if (act.type === 'wait') {
