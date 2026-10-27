@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, HardDrive, RefreshCw, ExternalLink, Sun, Moon, CloudDownload, Menu, X, CheckCircle, Sparkles, Activity, Cpu } from 'lucide-react';
+import { Bot, HardDrive, RefreshCw, ExternalLink, Sun, Moon, CloudDownload, Menu, X, CheckCircle, Sparkles, Activity, Cpu, Camera } from 'lucide-react';
 
 export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal, activeTab, setActiveTab, theme, toggleTheme, isMcpConnected, isExecuting, driveStatus, aiStatus }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -61,6 +61,18 @@ export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpe
               <span className="ml-0.5 px-1.5 py-0.2 bg-slate-200/80 dark:bg-slate-800 text-indigo-600 dark:text-indigo-300 rounded text-[10px] font-mono">
                 {docCount}
               </span>
+            </button>
+
+            <button
+              onClick={() => handleTabSelect('screenshots')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                activeTab === 'screenshots'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Screenshots</span>
             </button>
           </nav>
 
@@ -220,6 +232,18 @@ export default function Header({ docCount, isSyncing, onSync, onDriveSync, onOpe
           >
             <HardDrive className="w-3.5 h-3.5" />
             <span>Knowledge Drive ({docCount})</span>
+          </button>
+
+          <button
+            onClick={() => handleTabSelect('screenshots')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition shrink-0 flex items-center gap-1.5 ${
+              activeTab === 'screenshots'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-slate-100 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Screenshots</span>
           </button>
         </div>
 

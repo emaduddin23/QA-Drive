@@ -1,8 +1,20 @@
-import { CheckCircle2, XCircle, Camera, Activity, Cpu, Send, StopCircle, Download } from 'lucide-react';
+import { CheckCircle2, XCircle, Camera, Activity, Cpu, Send, StopCircle, Download, Maximize2, ExternalLink } from 'lucide-react';
 import { useState } from 'react';
+import ScreenshotModal from './ScreenshotModal';
 
 export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInteractiveCommand, onStopInteractive, onStopAutonomous, currentStep, executionResults, finalReport, isMcpConnected, statusMessage }) {
   const [chatInput, setChatInput] = useState('');
+  const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState(null);
+
+  // List of all valid screenshots in this execution
+  const screenshotsList = executionResults
+    .filter(r => Boolean(r.screenshotUrl))
+    .map(r => ({
+      url: r.screenshotUrl,
+      title: `Step #${r.stepNum}: ${r.testCase?.title || 'Execution'}`,
+      status: r.status,
+      filename: r.screenshotUrl.split('/').pop()
+    }));
 
   const handleSend = () => {
     if (chatInput.trim()) {
@@ -213,15 +225,30 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
                   </div>
                 </div>
 
-                {/* Screenshot Preview */}
+                {/* Screenshot Preview with Fullscreen Click */}
                 {res.screenshotUrl && (
-                  <div className="relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-950 group">
+                  <div
+                    onClick={() => {
+                      const idx = screenshotsList.findIndex(s => s.url === res.screenshotUrl);
+                      if (idx !== -1) setSelectedScreenshotIndex(idx);
+                    }}
+                    className="relative rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-950 group cursor-pointer"
+                    title="Click to view full-resolution screenshot"
+                  >
                     <img
                       src={res.screenshotUrl}
                       alt={`Screenshot for ${res.testCase.id}`}
-                      className="w-full h-36 sm:h-44 object-cover object-top opacity-90 group-hover:opacity-100 transition"
+                      className="w-full h-36 sm:h-44 object-cover object-top opacity-90 group-hover:opacity-100 group-hover:scale-105 transition duration-200"
                     />
-                    <div className="absolute bottom-1 right-2 bg-slate-900/80 px-2 py-0.5 rounded text-[9px] text-slate-300 font-mono flex items-center gap-1">
+
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                      <span className="bg-indigo-600/90 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-lg">
+                        <Maximize2 className="w-3.5 h-3.5" /> View Fullscreen
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-1.5 right-2 bg-slate-900/80 px-2 py-0.5 rounded text-[9px] text-slate-300 font-mono flex items-center gap-1">
                       <Camera className="w-2.5 h-2.5 text-indigo-400" /> Playwright Capture
                     </div>
                   </div>
@@ -231,6 +258,17 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
           );
         })}
       </div>
+
+      {/* Fullscreen Screenshot Modal */}
+      {selectedScreenshotIndex !== null && (
+        <ScreenshotModal
+          isOpen={true}
+          onClose={() => setSelectedScreenshotIndex(null)}
+          screenshots={screenshotsList}
+          currentIndex={selectedScreenshotIndex}
+          onNavigate={(newIdx) => setSelectedScreenshotIndex(newIdx)}
+        />
+      )}
     </div>
   );
 }

@@ -37,7 +37,48 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 // Serve static screenshots & public assets
-app.use('/screenshots', express.static(path.resolve(process.cwd(), 'public/screenshots')));
+const SCREENSHOT_DIR = path.resolve(process.cwd(), 'public/screenshots');
+app.use('/screenshots', express.static(SCREENSHOT_DIR));
+
+// API to list all captured screenshots
+app.get('/api/screenshots', (req, res) => {
+  try {
+    if (!fs.existsSync(SCREENSHOT_DIR)) {
+      return res.json({ screenshots: [], total: 0 });
+    }
+    const files = fs.readdirSync(SCREENSHOT_DIR).filter(f => f.endsWith('.png') || f.endsWith('.jpg'));
+    const screenshots = files.map(filename => {
+      const fullPath = path.join(SCREENSHOT_DIR, filename);
+      const stat = fs.statSync(fullPath);
+      return {
+        filename,
+        url: `/screenshots/${filename}`,
+        size: stat.size,
+        modifiedTime: stat.mtimeMs,
+        createdAt: stat.birthtime
+      };
+    }).sort((a, b) => b.modifiedTime - a.modifiedTime);
+
+    res.json({ screenshots, total: screenshots.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a screenshot
+app.delete('/api/screenshots/:filename', (req, res) => {
+  try {
+    const filename = path.basename(req.params.filename);
+    const targetPath = path.join(SCREENSHOT_DIR, filename);
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+      return res.json({ success: true, message: 'Screenshot deleted' });
+    }
+    res.status(404).json({ error: 'Screenshot not found' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Create HTTP server
 const server = http.createServer(app);

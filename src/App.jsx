@@ -6,6 +6,7 @@ import ExecutionMonitor from './components/ExecutionMonitor';
 import GoogleDriveModal from './components/GoogleDriveModal';
 import PlaywrightMcpModal from './components/PlaywrightMcpModal';
 import AiSettingsModal from './components/AiSettingsModal';
+import ScreenshotsGallery from './components/ScreenshotsGallery';
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
@@ -412,6 +413,10 @@ export default function App() {
             onOpenAiModal={() => setIsAiModalOpen(true)}
             driveStatus={driveStatus}
           />
+        )}
+
+        {activeTab === 'screenshots' && (
+          <ScreenshotsGallery />
         )}
       </main>
 
