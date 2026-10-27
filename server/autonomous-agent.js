@@ -260,10 +260,11 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
     }
 
     // Main Autonomous Loop
-    const MAX_AUTONOMOUS_STEPS = 10;
+    const MAX_AUTONOMOUS_STEPS = 15;
     let stepNum = 1;
-    let consecutiveSameStateCount = 0;
+    let consecutiveFailureCount = 0;
     let lastStateSignature = '';
+    let lastActionWasSuccessful = true;
 
     while (!stopRequested && stepNum <= MAX_AUTONOMOUS_STEPS) {
       onStepProgress({ type: 'STATUS', message: `Analyzing page state (Step ${stepNum}/${MAX_AUTONOMOUS_STEPS})...` });
@@ -271,20 +272,20 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
       const pageState = await getPageState(page);
       const currentUrl = page.url();
 
-      // Repetitive loop detector
-      const stateSig = `${currentUrl}::${(pageState || '').substring(0, 150).replace(/\s+/g, ' ')}`;
-      if (stateSig === lastStateSignature) {
-        consecutiveSameStateCount++;
-        if (consecutiveSameStateCount >= 2) {
+      // Resilient loop detector: only flag if actions repeatedly fail on the same page
+      const fullStateSig = `${currentUrl}::${pageState.length}::${pageState.substring(0, 400).replace(/\s+/g, ' ')}`;
+      if (fullStateSig === lastStateSignature && !lastActionWasSuccessful) {
+        consecutiveFailureCount++;
+        if (consecutiveFailureCount >= 4) {
           onStepProgress({
             type: 'STATUS',
-            message: `⚠️ Loop Detected: Browser has stayed on the same page state without progress. Ending exploration safely.`
+            message: `⚠️ Unresponsive page: actions repeatedly failed without progress. Ending exploration safely.`
           });
           break;
         }
       } else {
-        consecutiveSameStateCount = 0;
-        lastStateSignature = stateSig;
+        consecutiveFailureCount = 0;
+        lastStateSignature = fullStateSig;
       }
       
       onStepProgress({ type: 'STATUS', message: `Deciding next action... (Current URL: ${currentUrl})` });
@@ -414,10 +415,12 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
         screenshotUrl = `/screenshots/${screenshotFileName}`;
         
         pastActions.push(decision.testCase?.title || `Step ${stepNum}`);
+        lastActionWasSuccessful = true;
 
       } catch (err) {
         status = 'FAILED';
         actualOutput = `Error: ${err.message}`;
+        lastActionWasSuccessful = false;
       }
 
       const resultObj = {

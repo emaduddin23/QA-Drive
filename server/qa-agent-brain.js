@@ -209,10 +209,13 @@ ${JSON.stringify(pastActions, null, 2)}
 Instructions:
 1. First, study the QA Knowledge Base documents (PDF guidelines) above. Apply testing techniques like Boundary Value Analysis, Equivalence Partitioning, negative validation tests, or exploratory paths as specified in your documents.
 2. Review the Current Page State and Past Actions.
-3. Decide on ONE logical next step to test the application (e.g., click a specific link, fill a form with invalid data, submit a form).
-4. Explore interactive elements: click navigation links, test forms, trigger filters, and test boundaries.
-5. If the current page shows a connection timeout (e.g. ERR_TIMED_OUT), an error screen, or has no new interactive elements left to test, set "isDone": true immediately.
-6. When primary interactive flows have been covered (typically 4 to 8 steps), set "isDone": true to complete the test suite cleanly.
+3. Decide on ONE logical next step to test the application.
+4. THOROUGH MULTI-FEATURE EXPLORATION:
+   - When testing a dashboard or portal (e.g. "News Feed", "Chats", "Bookings", "My Schedule", "Settings", search bar, posting forms, notifications), test each distinct feature and navigation item step by step.
+   - Do NOT set "isDone": true prematurely after only 1 or 2 steps! You MUST perform at least 6 to 12 distinct test steps covering the application's functionality.
+5. Only set "isDone": true when:
+   - You have thoroughly explored all key navigation sections and interactive features (stepNum >= 8), OR
+   - The page encountered a fatal connection timeout or error (e.g. ERR_TIMED_OUT).
 6. Formulate the Playwright actions for this step.
 7. Provide a Test Case description for the action you chose, referencing the exact PDF document name that guided this test.
 ${loggedIn ? '8. REMINDER: Do NOT test login. Focus on post-login content ONLY.' : ''}
