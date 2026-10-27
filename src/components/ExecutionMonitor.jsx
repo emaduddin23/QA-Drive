@@ -1,7 +1,7 @@
 import { CheckCircle2, XCircle, Camera, Activity, Cpu, Send, StopCircle, Download } from 'lucide-react';
 import { useState } from 'react';
 
-export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInteractiveCommand, onStopInteractive, currentStep, executionResults, finalReport, isMcpConnected }) {
+export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInteractiveCommand, onStopInteractive, onStopAutonomous, currentStep, executionResults, finalReport, isMcpConnected, statusMessage }) {
   const [chatInput, setChatInput] = useState('');
 
   const handleSend = () => {
@@ -101,9 +101,24 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
           <div className="bg-slate-900 text-slate-100 p-3 rounded-xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 sm:gap-2 text-xs font-mono text-indigo-300">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0"></div>
-              <span>Executing Step {currentStep?.stepIndex || 1}...</span>
+              <span>{statusMessage || (currentStep ? `Executing Step ${currentStep.stepIndex}...` : 'Autonomous QA Explorer Active...')}</span>
             </div>
-            <span className="text-slate-400 text-[11px] truncate max-w-full sm:max-w-[300px]">{currentStep?.testCase?.title}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-slate-400 text-[11px] truncate max-w-full sm:max-w-[280px]">
+                {currentStep?.testCase?.title}
+              </span>
+              {!isInteractive && onStopAutonomous && (
+                <button
+                  type="button"
+                  onClick={onStopAutonomous}
+                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-sans font-semibold rounded-lg transition flex items-center gap-1 shrink-0 shadow-sm"
+                  title="Stop autonomous execution"
+                >
+                  <StopCircle className="w-3.5 h-3.5" />
+                  <span>Stop</span>
+                </button>
+              )}
+            </div>
           </div>
         )}
 

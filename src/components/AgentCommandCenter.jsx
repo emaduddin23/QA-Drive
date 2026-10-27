@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Send, Sparkles, Play, Layers, BookOpen, Cpu, CheckCircle, XOctagon } from 'lucide-react';
 
 export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isPlanning, currentPlan, onExecuteSuite, isExecuting, isInteractive, onStartInteractive, onStartAutonomous, isMcpConnected, driveStatus, aiStatus, onOpenDriveModal, onOpenPlaywrightModal, onOpenAiModal }) {
@@ -9,6 +9,18 @@ export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isP
   const [autoPass, setAutoPass] = useState('');
   const [autoPrompt, setAutoPrompt] = useState('');
   const [useKnowledgeDrive, setUseKnowledgeDrive] = useState(true);
+
+  const extractUrlFromText = (text) => {
+    const match = (text || '').match(/https?:\/\/[^\s]+/i);
+    return match ? match[0] : '';
+  };
+
+  // Automatically sync planned targetUrl into the autonomous crawler URL state
+  useEffect(() => {
+    if (currentPlan?.targetUrl) {
+      setAutoUrl(currentPlan.targetUrl);
+    }
+  }, [currentPlan]);
 
   const samplePrompts = [
     "Test the checkout feature quantity validation using Boundary Value Analysis",
@@ -23,6 +35,10 @@ export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isP
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!prompt.trim() || isPlanning) return;
+    const urlInPrompt = extractUrlFromText(prompt);
+    if (urlInPrompt && !autoUrl) {
+      setAutoUrl(urlInPrompt);
+    }
     onGeneratePlan(prompt);
   };
 
@@ -161,9 +177,13 @@ export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isP
               </label>
               <button
                 type="button"
-                onClick={() => onStartAutonomous(autoUrl, autoUser, autoPass, useKnowledgeDrive, autoPrompt)}
-                disabled={isExecuting || !autoUrl.trim()}
-                className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs px-5 py-3 rounded-lg transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 disabled:opacity-50"
+                onClick={() => {
+                  const urlToUse = autoUrl.trim() || currentPlan?.targetUrl || extractUrlFromText(prompt) || 'https://example.com';
+                  if (!autoUrl.trim()) setAutoUrl(urlToUse);
+                  onStartAutonomous(urlToUse, autoUser, autoPass, useKnowledgeDrive, autoPrompt || prompt);
+                }}
+                disabled={isExecuting}
+                className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs px-5 py-3 rounded-lg transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isExecuting ? (
                   <>
@@ -229,7 +249,8 @@ export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isP
                 <button
                   onClick={onExecuteSuite}
                   disabled={isExecuting}
-                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  title="Run all generated Playwright test cases sequentially"
                 >
                   {isExecuting ? (
                     <>
@@ -244,11 +265,24 @@ export default function AgentCommandCenter({ onGeneratePlan, onStopPlanning, isP
                   )}
                 </button>
                 <button
-                  onClick={onStartInteractive}
-                  disabled={isExecuting || isInteractive}
-                  className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  onClick={() => {
+                    const urlToUse = currentPlan.targetUrl || autoUrl.trim() || extractUrlFromText(prompt) || 'https://example.com';
+                    onStartAutonomous(urlToUse, autoUser, autoPass, useKnowledgeDrive, prompt);
+                  }}
+                  disabled={isExecuting}
+                  className="w-full sm:w-auto bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-teal-900/40 flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  title="Start Autonomous Crawler to explore and test this target URL live"
                 >
                   <Cpu className="w-4 h-4" />
+                  <span>Autonomous Crawler</span>
+                </button>
+                <button
+                  onClick={() => onStartInteractive(currentPlan.targetUrl || '')}
+                  disabled={isExecuting || isInteractive}
+                  className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2 disabled:opacity-50 shrink-0"
+                  title="Control the browser live with interactive instructions"
+                >
+                  <Sparkles className="w-4 h-4" />
                   <span>Interactive Agent</span>
                 </button>
               </div>

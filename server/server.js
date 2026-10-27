@@ -9,6 +9,8 @@ import { agentBrain } from './qa-agent-brain.js';
 import { runPlaywrightSuite, startInteractiveSession, executeInteractiveActions, stopInteractiveSession } from './playwright-runner.js';
 import { startAutonomousTesting, stopAutonomousTesting } from './autonomous-agent.js';
 import { driveSyncService } from './google-drive-sync.js';
+import { spawn } from 'child_process';
+import net from 'net';
 
 // Load environment variables from .env file if present
 const ENV_FILE = path.resolve(process.cwd(), '.env');
@@ -369,6 +371,10 @@ app.post('/api/test/autonomous/start', async (req, res) => {
       broadcast(update);
     }).then(report => {
       broadcast({ type: 'EXECUTION_COMPLETE', report });
+    }).catch(err => {
+      console.error("[Autonomous] Execution uncaught error:", err);
+      broadcast({ type: 'STATUS', message: `Execution failed: ${err.message}` });
+      broadcast({ type: 'EXECUTION_COMPLETE', report: { summary: { total: 0, passed: 0, failed: 0, passRate: '0%' }, results: [] } });
     });
 
   } catch (err) {
@@ -606,7 +612,51 @@ if (fs.existsSync(distPath)) {
   });
 }
 
+function isPortOpen(port, host = '127.0.0.1') {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1000);
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.on('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.connect(port, host);
+  });
+}
+
+async function ensure9RouterRunning() {
+  const isOpen = await isPortOpen(20128);
+  if (isOpen) {
+    console.log('[9Router] Gateway is already running on port 20128.');
+    return;
+  }
+  const paths = [
+    '/Users/bluebayitlimited/.local/bin/9router',
+    '9router'
+  ];
+  for (const bin of paths) {
+    try {
+      const child = spawn(bin, ['-n', '-p', '20128'], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      console.log(`[9Router] Successfully auto-spawned ${bin} on port 20128.`);
+      return;
+    } catch (e) {}
+  }
+}
+
 // Start Server
 server.listen(PORT, () => {
   console.log(`[AI QA Agent Server] Running at http://localhost:${PORT}`);
+  ensure9RouterRunning().catch(() => {});
 });

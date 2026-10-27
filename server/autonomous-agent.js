@@ -159,20 +159,26 @@ IMPORTANT: Use the EXACT selectors from the page state. Do not guess.`;
       const currentUrl = page.url();
       
       onStepProgress({ type: 'STATUS', message: `Deciding next action... (Current URL: ${currentUrl})` });
-      const decision = await agentBrain.decideNextAutonomousAction({
-        pageState,
-        pastActions,
-        targetUrl: postLoginUrl, // Use post-login URL, not the original login page URL
-        stepNum,
-        apiKey,
-        provider,
-        modelName,
-        knowledgeDocs,
-        goalPrompt,
-        loggedIn
-      });
+      let decision;
+      try {
+        decision = await agentBrain.decideNextAutonomousAction({
+          pageState,
+          pastActions,
+          targetUrl: postLoginUrl, // Use post-login URL, not the original login page URL
+          stepNum,
+          apiKey,
+          provider,
+          modelName,
+          knowledgeDocs,
+          goalPrompt,
+          loggedIn
+        });
+      } catch (err) {
+        onStepProgress({ type: 'STATUS', message: `AI Reasoning Error: ${err.message}` });
+        break;
+      }
 
-      if (decision.isDone) {
+      if (!decision || decision.isDone) {
         onStepProgress({ type: 'STATUS', message: `Autonomous agent decided testing is complete.` });
         break;
       }

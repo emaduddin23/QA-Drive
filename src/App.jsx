@@ -28,6 +28,7 @@ export default function App() {
   const [currentStep, setCurrentStep] = useState(null);
   const [executionResults, setExecutionResults] = useState([]);
   const [finalReport, setFinalReport] = useState(null);
+  const [statusMessage, setStatusMessage] = useState('');
 
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -124,13 +125,17 @@ export default function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'STEP_START') {
+        if (data.type === 'STATUS') {
+          setStatusMessage(data.message || '');
+        } else if (data.type === 'STEP_START') {
           setCurrentStep(data);
+          setStatusMessage(data.testCase?.title || `Executing Step ${data.stepIndex}`);
         } else if (data.type === 'STEP_COMPLETE') {
           setExecutionResults(prev => [...prev, data.result]);
         } else if (data.type === 'EXECUTION_COMPLETE') {
           setIsExecuting(false);
           setFinalReport(data.report);
+          setStatusMessage('Execution Complete');
         }
       } catch (err) {
         console.error("WS message parse error:", err);
@@ -273,7 +278,7 @@ export default function App() {
     setIsExecuting(true);
     setExecutionResults([]);
     setFinalReport(null);
-    setCurrentPlan(null); // Clear manual plan
+    setStatusMessage('Starting Autonomous QA Explorer...');
     
     try {
       await fetch('/api/test/autonomous/start', {
@@ -285,6 +290,18 @@ export default function App() {
     } catch (err) {
       console.error("Failed to start autonomous session:", err);
       setIsExecuting(false);
+      setStatusMessage(`Error: ${err.message}`);
+    }
+  };
+
+  const handleStopAutonomous = async () => {
+    try {
+      await fetch('/api/test/autonomous/stop', { method: 'POST' });
+    } catch (err) {
+      console.error("Failed to stop autonomous session:", err);
+    } finally {
+      setIsExecuting(false);
+      setStatusMessage('Autonomous session stopped.');
     }
   };
 
@@ -376,10 +393,12 @@ export default function App() {
               isInteractive={isInteractive}
               onSendInteractiveCommand={handleSendInteractiveCommand}
               onStopInteractive={handleStopInteractive}
+              onStopAutonomous={handleStopAutonomous}
               currentStep={currentStep}
               executionResults={executionResults}
               finalReport={finalReport}
               isMcpConnected={isMcpConnected}
+              statusMessage={statusMessage}
             />
           </div>
         )}

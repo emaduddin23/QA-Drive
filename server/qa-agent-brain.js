@@ -440,17 +440,22 @@ ${knowledgeText}
       if (apiKey && apiKey.trim()) {
         headers['Authorization'] = `Bearer ${apiKey.trim()}`;
       }
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: modelName || 'kgw/kilo-auto/free',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
-        })
-      });
+      let res;
+      try {
+        res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: modelName || 'kgw/kilo-auto/free',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ]
+          })
+        });
+      } catch (fetchErr) {
+        throw new Error(`Cannot reach 9Router gateway at ${baseUrl} (${fetchErr.message}). Make sure 9router is running on port 20128.`);
+      }
 
       const rawText = await res.text();
       let data;
