@@ -5,7 +5,7 @@ import { agentBrain } from './qa-agent-brain.js';
 
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'public/screenshots');
 
-async function getPageState(page) {
+export async function getPageState(page) {
   // Extract interactive elements with detailed selector info
   return await page.evaluate(() => {
     const elements = Array.from(document.querySelectorAll('a, button, input, select, textarea, [role="button"], [role="link"]'));
@@ -222,11 +222,51 @@ IMPORTANT: Use the EXACT selectors from the page state. Do not guess.`;
               }
             }
 
-            if (action.type === 'goto') await page.goto(action.url, { waitUntil: 'domcontentloaded' });
-            else if (action.type === 'fill') await page.fill(action.selector, String(action.value)).catch(()=> { actualOutput = `Failed to find selector ${action.selector}`});
-            else if (action.type === 'click') await page.click(action.selector).catch(()=> { actualOutput = `Failed to find selector ${action.selector}`});
-            else if (action.type === 'wait') await page.waitForTimeout(action.timeout || 1000);
-            else if (action.type === 'press') await page.keyboard.press(action.key || 'Enter');
+            const execAction = async (act) => {
+              if (act.type === 'goto') await page.goto(act.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              else if (act.type === 'fill') await page.fill(act.selector, String(act.value));
+              else if (act.type === 'click') await page.click(act.selector);
+              else if (act.type === 'wait') await page.waitForTimeout(act.timeout || 1000);
+              else if (act.type === 'press') await page.keyboard.press(act.key || 'Enter');
+            };
+
+            try {
+              await execAction(action);
+            } catch (actErr) {
+              onStepProgress({
+                type: 'STATUS',
+                message: `✨ [Self-Healing] Step missed or blocked (${action.type} ${action.selector || ''}). AI auto-recovering...`
+              });
+              try {
+                const liveState = await getPageState(page);
+                const healed = await agentBrain.autoHealFailedAction({
+                  failedAction: action,
+                  errorMessage: actErr.message,
+                  pageState: liveState,
+                  targetUrl: page.url(),
+                  testCaseTitle: decision.testCase?.title || `Autonomous Step ${stepNum}`,
+                  apiKey,
+                  provider,
+                  modelName
+                });
+                if (healed && Array.isArray(healed.healedActions) && healed.healedActions.length > 0) {
+                  onStepProgress({
+                    type: 'STATUS',
+                    message: `✨ [Self-Healing] ${healed.reason || 'Applying missing prerequisite step'}...`
+                  });
+                  for (const hAct of healed.healedActions) {
+                    await execAction(hAct).catch(() => {});
+                    await page.waitForTimeout(400);
+                  }
+                  await execAction(action).catch(() => {});
+                  actualOutput = `✓ Auto-recovered missing step: ${healed.reason || 'Healed'}`;
+                } else {
+                  actualOutput = `Failed: ${actErr.message}`;
+                }
+              } catch (hErr) {
+                actualOutput = `Failed: ${actErr.message}`;
+              }
+            }
           }
         }
 

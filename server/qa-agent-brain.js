@@ -243,6 +243,53 @@ Output Schema:
 
     return llmResult;
   }
+
+  async autoHealFailedAction({ failedAction, errorMessage, pageState, targetUrl, testCaseTitle, apiKey, provider, modelName }) {
+    const systemPrompt = `You are an elite AI Self-Healing QA Automation Engine.
+A Playwright browser action failed during test execution. Your task is to diagnose the failure, inspect the current DOM state, and provide recovery actions to heal the execution so the intended step succeeds.
+
+Failed Test Case: "${testCaseTitle || 'Dynamic Test Step'}"
+Target URL: "${targetUrl || ''}"
+Failed Action: ${JSON.stringify(failedAction)}
+Error Message: "${errorMessage || 'Element not found or not interactable'}"
+
+Live Page State (DOM elements available on the page right now):
+${pageState ? pageState.substring(0, 3500) : 'No elements found.'}
+
+Self-Healing Guidance:
+1. Prerequisite Missed: If the intended action requires an earlier step (e.g. must select an item, add to cart, open a menu, or accept terms first), perform that prerequisite step.
+2. Overlay or Modal: If a cookie banner, modal popup, or overlay is blocking the target, provide an action to close/dismiss it.
+3. Selector Alternative: If the original selector (e.g. "${failedAction.selector || ''}") is missing or changed, find the exact matching element selector from the Live Page State above.
+4. Input / Button: Use valid Playwright actions: "click", "fill", "wait", "press", "goto".
+
+CRITICAL: Return ONLY valid JSON in this schema (no markdown formatting):
+{
+  "reason": "Brief 1-sentence explanation of what was missed, blocked, or healed",
+  "healedActions": [
+    { "type": "click", "selector": "#correct-selector" }
+  ]
+}`;
+
+    try {
+      const llmResult = await this.callLlmApi({
+        apiKey,
+        provider,
+        modelName,
+        userPrompt: `Diagnose and self-heal failed action: ${JSON.stringify(failedAction)} (Error: ${errorMessage})`,
+        knowledgeDocs: [],
+        systemPromptOverride: systemPrompt
+      });
+
+      if (llmResult && Array.isArray(llmResult.healedActions) && llmResult.healedActions.length > 0) {
+        return llmResult;
+      }
+      return null;
+    } catch (e) {
+      console.warn("[QAAgentBrain] Self-healing reasoning error:", e.message);
+      return null;
+    }
+  }
+
   async callLlmApi({ apiKey, provider, modelName, userPrompt, knowledgeDocs = [], systemPromptOverride }) {
     const knowledgeText = (knowledgeDocs && knowledgeDocs.length > 0)
       ? knowledgeDocs.map(d => `--- File: ${d.filename} (${d.category}) ---\n${d.content}`).join('\n\n')

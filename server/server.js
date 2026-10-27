@@ -342,10 +342,14 @@ app.post('/api/test/execute', async (req, res) => {
   
   res.json({ success: true, message: 'Playwright automation suite launched.' });
 
+  const currentKey = getActiveAiKey();
   runPlaywrightSuite(testPlan, targetUrl, (update) => {
     broadcast(update);
-  }).then(report => {
+  }, currentKey, activeAiConfig.provider, activeAiConfig.model).then(report => {
     broadcast({ type: 'EXECUTION_COMPLETE', report });
+  }).catch(err => {
+    console.error("[PlaywrightSuite] Execution error:", err);
+    broadcast({ type: 'STATUS', message: `Execution error: ${err.message}` });
   });
 });
 

@@ -1,6 +1,8 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { agentBrain } from './qa-agent-brain.js';
+import { getPageState } from './autonomous-agent.js';
 
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'public/screenshots');
 
@@ -8,7 +10,7 @@ let activeInteractiveBrowser = null;
 let activeInteractivePage = null;
 let interactiveStepCount = 0;
 
-export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
+export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress, apiKey = null, provider = 'antigravity', modelName = null) {
   if (!fs.existsSync(SCREENSHOT_DIR)) {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   }
@@ -52,29 +54,95 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
       let actualOutput = '';
       let screenshotUrl = '';
 
+      let healed = false;
+      let healedReason = '';
+
       try {
-        // Execute dynamic actions
         actualOutput = "Actions executed successfully";
         if (tc.actions && Array.isArray(tc.actions)) {
           for (let a = 0; a < tc.actions.length; a++) {
             const action = tc.actions[a];
             onStepProgress({ type: 'STATUS', message: `Executing action: ${action.type} ${action.selector || action.url || ''}` });
-            
-            if (action.type === 'goto') {
-              await page.goto(action.url, { waitUntil: 'domcontentloaded' });
-            } else if (action.type === 'fill') {
-              // Wait for element to be visible before filling
-              await page.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
-              await page.fill(action.selector, String(action.value));
-            } else if (action.type === 'click') {
-              await page.waitForSelector(action.selector, { state: 'visible', timeout: 5000 }).catch(() => {});
-              await page.click(action.selector);
-            } else if (action.type === 'wait') {
-              await page.waitForTimeout(action.timeout || 1000);
-            } else if (action.type === 'press') {
-              await page.keyboard.press(action.key);
+
+            const executeSingleAction = async (act) => {
+              if (act.type === 'goto') {
+                await page.goto(act.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+              } else if (act.type === 'fill') {
+                await page.waitForSelector(act.selector, { state: 'visible', timeout: 4000 });
+                await page.fill(act.selector, String(act.value));
+              } else if (act.type === 'click') {
+                await page.waitForSelector(act.selector, { state: 'visible', timeout: 4000 });
+                await page.click(act.selector);
+              } else if (act.type === 'wait') {
+                await page.waitForTimeout(act.timeout || 1000);
+              } else if (act.type === 'press') {
+                await page.keyboard.press(act.key || 'Enter');
+              }
+            };
+
+            try {
+              await executeSingleAction(action);
+            } catch (initialErr) {
+              // Action missed or blocked! Trigger AI Self-Healing
+              onStepProgress({
+                type: 'STATUS',
+                message: `✨ [AI Self-Healing] Step missed or element not found (${action.type} ${action.selector || ''}). Analyzing DOM to auto-recover...`
+              });
+
+              let autoRecovered = false;
+              try {
+                const livePageState = await getPageState(page);
+                const healResult = await agentBrain.autoHealFailedAction({
+                  failedAction: action,
+                  errorMessage: initialErr.message,
+                  pageState: livePageState,
+                  targetUrl: page.url(),
+                  testCaseTitle: tc.title,
+                  apiKey,
+                  provider,
+                  modelName
+                });
+
+                if (healResult && Array.isArray(healResult.healedActions) && healResult.healedActions.length > 0) {
+                  onStepProgress({
+                    type: 'STATUS',
+                    message: `✨ [Self-Healing Action] ${healResult.reason || 'Applying missing steps'}...`
+                  });
+
+                  for (const healAct of healResult.healedActions) {
+                    try {
+                      await executeSingleAction(healAct);
+                      await page.waitForTimeout(500);
+                    } catch (ignoreErr) {}
+                  }
+
+                  // Retry intended action after healing
+                  try {
+                    await executeSingleAction(action);
+                    autoRecovered = true;
+                    healed = true;
+                    healedReason = healResult.reason || 'Auto-recovered missing step';
+                    onStepProgress({
+                      type: 'STATUS',
+                      message: `✓ [Self-Healing] Successfully healed: ${healedReason}`
+                    });
+                  } catch (retryErr) {
+                    // Intended action still failed
+                  }
+                }
+              } catch (healErr) {
+                console.warn("[PlaywrightRunner] Self-healing error:", healErr.message);
+              }
+
+              if (!autoRecovered) {
+                throw initialErr;
+              }
             }
           }
+        }
+
+        if (healed) {
+          actualOutput = `✓ Healed by AI: ${healedReason}`;
         }
 
         // Capture step screenshot
@@ -93,6 +161,8 @@ export async function runPlaywrightSuite(testPlan, targetUrl, onStepProgress) {
         stepNum,
         testCase: tc,
         status,
+        healed,
+        healedReason,
         actualOutput,
         screenshotUrl,
         durationMs

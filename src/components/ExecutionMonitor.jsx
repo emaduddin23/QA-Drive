@@ -46,6 +46,7 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
 
   const passedCount = executionResults.filter(r => r.status === 'PASSED').length;
   const failedCount = executionResults.filter(r => r.status === 'FAILED').length;
+  const healedCount = executionResults.filter(r => r.healed).length;
   const totalCount = executionResults.length;
 
   return (
@@ -64,7 +65,7 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Executing synthesized BVA & Equivalence Partitioning test cases live in Playwright Chromium.
+              Executing synthesized BVA & Equivalence Partitioning test cases live with AI Self-Healing.
             </p>
           </div>
 
@@ -79,16 +80,20 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
                 <Download className="w-3.5 h-3.5" /> Export Excel
               </button>
             )}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3 items-center w-full sm:w-auto">
-              <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[60px] sm:min-w-[70px]">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 items-center w-full sm:w-auto">
+              <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[55px] sm:min-w-[65px]">
                 <div className="text-sm font-bold text-slate-800 dark:text-slate-200">{totalCount}</div>
                 <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-medium">Total</div>
               </div>
-              <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/30 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[60px] sm:min-w-[70px]">
+              <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/30 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[55px] sm:min-w-[65px]">
                 <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{passedCount}</div>
                 <div className="text-[9px] text-emerald-700 dark:text-emerald-300 uppercase font-medium">Passed</div>
               </div>
-              <div className="bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-500/30 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[60px] sm:min-w-[70px]">
+              <div className="bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-500/30 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[55px] sm:min-w-[65px]">
+                <div className="text-sm font-bold text-amber-600 dark:text-amber-400">{healedCount}</div>
+                <div className="text-[9px] text-amber-700 dark:text-amber-300 uppercase font-medium">✨ Healed</div>
+              </div>
+              <div className="bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-500/30 rounded-xl px-2.5 sm:px-3 py-1.5 text-center min-w-[55px] sm:min-w-[65px]">
                 <div className="text-sm font-bold text-rose-600 dark:text-rose-400">{failedCount}</div>
                 <div className="text-[9px] text-rose-700 dark:text-rose-300 uppercase font-medium">Failed</div>
               </div>
@@ -181,9 +186,16 @@ export default function ExecutionMonitor({ isExecuting, isInteractive, onSendInt
                     <XCircle className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5 sm:mt-0" />
                   )}
                   <div>
-                    <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-bold mr-2">
-                      STEP #{res.stepNum} ({res.testCase.id})
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 font-bold">
+                        STEP #{res.stepNum} ({res.testCase.id})
+                      </span>
+                      {res.healed && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gradient-to-r from-amber-500/20 to-emerald-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded text-[9px] font-bold">
+                          ✨ Self-Healed
+                        </span>
+                      )}
+                    </div>
                     <h4 className="text-xs font-semibold text-slate-900 dark:text-slate-200 mt-0.5">{res.testCase.title}</h4>
                   </div>
                 </div>
