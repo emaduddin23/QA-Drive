@@ -98,12 +98,12 @@ export async function startAutonomousTesting(url, username, password, apiKey, pr
       if (passMatch && !resolvedPass) resolvedPass = passMatch[1];
     }
 
-    const hasLoginIntent = (resolvedUser && resolvedPass) || /sign\s*in|sign\s*with|login|log\s*in|authenticate|dashboard/i.test(goalPrompt || '');
+    const hasLoginIntent = (resolvedUser && resolvedPass) || /sign\s*in|sign\s*with|sign\s*up|login|log\s*in|logon|authenticate|auth|sso|oauth|credentials|password|dashboard/i.test(goalPrompt || '');
     if (hasLoginIntent) {
-      onStepProgress({ type: 'STATUS', message: `Detecting sign-in flow (SSO / Uapp / Form credentials)...` });
+      onStepProgress({ type: 'STATUS', message: `Detecting sign-in flow (SSO / App / Form credentials)...` });
       const loginPageState = await getPageState(page);
       const loginPrompt = `You are an AI Browser Automation Engineer.
-Your goal is to authenticate the user and reach the Dashboard.
+Your goal is to authenticate the user and reach the Dashboard or internal area.
 Examine the Live Page State (DOM elements):
 ${loginPageState}
 
@@ -112,13 +112,14 @@ ${resolvedUser ? `Username/Email: ${resolvedUser}` : 'Username/Email: user@examp
 ${resolvedPass ? `Password: ${resolvedPass}` : 'Password: Password123!'}
 
 CRITICAL RULES:
-1. If there is a Single Sign-On / App Login button (such as "Sign in with Uapp", "Sign with Uapp", "Login with App", "Sign in with Google", "Log In", or "Sign In") that must be clicked first before the inputs appear, YOUR FIRST ACTION MUST BE TO CLICK THAT BUTTON!
-2. If email/username and password fields are present, fill them and click the Submit/Login button.
-3. Use exact selectors from the Live Page State.
+1. If the page flow or user prompt mentions an intermediate step (e.g. clicking an SSO / provider button like "Sign in with Google", "Sign with Uapp", "Login with App", "Continue with Email", or opening a login modal) BEFORE input fields appear:
+   YOUR FIRST ACTION MUST BE TO CLICK THAT BUTTON!
+2. If email/username and password fields are present in the Live Page State, fill them and click the Submit/Login button.
+3. Match selectors dynamically from the Live Page State elements provided above.
 
 Output ONLY a JSON array of actions:
 [
-  { "type": "click", "selector": "button:has-text('Sign with Uapp'), button:has-text('Sign in')" },
+  { "type": "click", "selector": "button:has-text('Sign In'), button:has-text('Login')" },
   { "type": "wait", "timeout": 2000 },
   { "type": "fill", "selector": "input[type='email'], #email", "value": "${resolvedUser || 'user@example.com'}" },
   { "type": "fill", "selector": "input[type='password'], #password", "value": "${resolvedPass || 'Password123!'}" },
