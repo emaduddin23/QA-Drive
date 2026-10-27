@@ -192,3 +192,4 @@ export default function ScreenshotModal({ isOpen, onClose, screenshots = [], cur
     </div>
   );
 }
+
