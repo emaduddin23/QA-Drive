@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const { PDFParse } = require('pdf-parse');
 
 const KNOWLEDGE_DIR = path.resolve(process.cwd(), 'QA-Knowledge');
+const CACHE_FILE = path.resolve(process.cwd(), 'server/qa-knowledge-cache.json');
 
 export class KnowledgeIndexer {
   constructor() {
@@ -60,14 +61,47 @@ export class KnowledgeIndexer {
     return docs;
   }
 
-  // Initialize with an optional array of documents, or scan local QA-Knowledge folder
+  // Save documents to disk cache
+  saveCache(docs) {
+    try {
+      if (Array.isArray(docs) && docs.length > 0) {
+        fs.writeFileSync(CACHE_FILE, JSON.stringify(docs, null, 2), 'utf8');
+      }
+    } catch (e) {
+      console.warn("[KnowledgeIndexer] Failed to save knowledge cache:", e.message);
+    }
+  }
+
+  // Load documents from disk cache
+  loadCache() {
+    try {
+      if (fs.existsSync(CACHE_FILE)) {
+        const raw = fs.readFileSync(CACHE_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("[KnowledgeIndexer] Failed to load knowledge cache:", e.message);
+    }
+    return [];
+  }
+
+  // Initialize with an optional array of documents, or scan local QA-Knowledge / cache
   async initialize(docs = []) {
     if (docs && docs.length > 0) {
       this.documents = docs;
+      this.saveCache(docs);
     } else {
       const localDocs = await this.loadLocalDocuments();
       if (localDocs.length > 0) {
         this.documents = localDocs;
+      } else {
+        const cachedDocs = this.loadCache();
+        if (cachedDocs.length > 0) {
+          this.documents = cachedDocs;
+        }
       }
     }
     
